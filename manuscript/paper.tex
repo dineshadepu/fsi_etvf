@@ -7,15 +7,23 @@
 \usepackage{amsmath}
 \usepackage{multirow}
 \usepackage[utf8]{inputenc}
+\usepackage{cleveref}
 
 % For the TODOs
 \usepackage{xcolor}
 \usepackage{xargs}
 \usepackage[colorinlistoftodos,textsize=footnotesize]{todonotes}
-\usepackage{lineno}
+\newcommand{\todoin}{\todo[inline]}
+% from here: https://tex.stackexchange.com/questions/9796/how-to-add-todo-notes
+\newcommandx{\unsure}[2][1=]{\todo[linecolor=red,backgroundcolor=red!25,bordercolor=red,#1]{#2}}
+\newcommandx{\change}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=blue,#1]{#2}}
+\newcommandx{\info}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}}
 
-%% Our macros
-\input{macros.tex}
+%Boldtype for greek symbols
+\newcommand{\teng}[1]{\ensuremath{\boldsymbol{#1}}}
+\newcommand{\ten}[1]{\ensuremath{\mathbf{#1}}}
+
+\usepackage{lineno}
 
 \journal{}
 
@@ -23,19 +31,18 @@
 
 \begin{frontmatter}
 
-  \title{Comparison of SPH schemes for solid mechanics}
-  \author[IITB]{A Dinesh\corrcoef{cor1}}
+  \title{Fluid structure interaction and rigid fluid coupling in SPH}
+  \author[IITB]{A Dinesh\corref{cor1}}
   \ead{adepu.dinesh.a@gmail.com}
   \author[IITB]{Prabhu Ramachandran}
   \ead{prabhu@aero.iitb.ac.in}
-\address[IITB]{Department of Aerospace Engineering, Indian Institute of
-  Technology Bombay, Powai, Mumbai 400076}
+  \address[IITB]{Department of Aerospace Engineering, Indian Institute of
+    Technology Bombay, Powai, Mumbai 400076}
 
 \cortext[cor1]{Corresponding author}
 
 \begin{abstract}
-  XXX
-  \end{abstract}
+\end{abstract}
 
 \begin{keyword}
 %% keywords here, in the form: keyword \sep keyword
@@ -50,13 +57,60 @@
 
 % \linenumbers
 
+
+
 \section{Introduction}
 \label{sec:intro}
+
 
 \section{The SPH method}
 \label{sec:sph}
 
 
+\section{2D Rigid body dynamics}
+\label{sec:rb-2d}
+
+
+\subsection{Center of mass, Linear momentum of a rigid body}
+\label{sec:center-mass}
+
+Let $N$ be an inertial frame in which a body $B$ is situated and is
+discretized into finite number of points. The center of mass is defined as \cite{rao2006dynamics}
+
+
+\begin{equation}
+  \label{eq:center-of-mass}
+  \ten{r}_{cm} = \frac{\sum_i m_i \; \ten{r}_i}{M}
+\end{equation}
+
+\noindent where $\ten{r}$ is the position vector of the point $i$ with mass
+$m_i$ in inertial frame $N$ and $M$ is the total mass of the rigid body under
+consideration.
+
+
+The linear momentum of the rigid body in the inertial frame is
+
+
+\begin{equation}
+  \label{eq:lin-mom-of-rigid-body}
+  \ten{G} = \sum_i m_i \; \ten{v}_i
+\end{equation}
+
+
+\begin{equation}
+  \label{eq:center-of-mass-velocity}
+  \ten{v}_{cm} = \frac{\sum_i m_i \; \ten{v}_i}{M}
+\end{equation}
+
+\noindent where $\ten{v}$ is the velocity vector of the point mass $i$ as
+observed in the inertial frame. Similarly the acceleration of the center of
+mass is
+
+
+\begin{equation}
+  \label{eq:acceleration-of-rigid-body}
+  \ten{a}_{cm} = \frac{\sum_i m_i \; \ten{a}_i}{M}
+\end{equation}
 
 
 
