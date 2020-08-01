@@ -37,21 +37,19 @@ class Case0(Application):
     def configure_scheme(self):
         dt = self.dt
         tf = self.tf
-        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=500)
+        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=100)
 
     def create_particles(self):
-        nx, ny, nz = 10, 10, 10
+        nx, ny = 10, 10
         dx = self.dx
-        x, y, z = np.mgrid[0:1:nx * 1j, 0:1:ny * 1j, 0:1:nz * 1j]
+        x, y = np.mgrid[0:1:nx * 1j, 0:1:ny * 1j]
         x = x.flat
         y = y.flat
-        z = (z - 1).flat
         m = np.ones_like(x) * dx * dx * self.rho0
         h = np.ones_like(x) * self.hdx * dx
         # radius of each sphere constituting in cube
         rad_s = np.ones_like(x) * dx
-        body = get_particle_array(name='body', x=x, y=y, z=z, h=h,
-                                  m=m, rad_s=rad_s)
+        body = get_particle_array(name='body', x=x, y=y, h=h, m=m, rad_s=rad_s)
         body_id = np.zeros(len(x), dtype=int)
         body.add_property('body_id', type='int', data=body_id)
         print(body.body_id)
@@ -59,22 +57,54 @@ class Case0(Application):
         # setup the properties
         self.scheme.setup_properties([body])
 
-        # print(body.properties)
-        # print(body.constants)
-        # print(body.xcm0)
-        # print(body.vcm0)
-        # print(body.R)
-        # print(body.orientation_angle)
-        # print(body.omega)
-
         body.vcm[0] = 0.5
         body.vcm[1] = 0.5
-        print(body.omega)
-        body.omega[2] = 1.
+        body.omega[2] = 10.
 
         return [body]
+
+    def post_process(self, fname):
+        if len(self.output_files) == 0:
+            return
+
+        from pysph.solver.utils import iter_output
+
+        files = self.output_files
+        files = files[3:]
+        t, total_energy = [], []
+        for sd, array in iter_output(files, 'body'):
+            _t = sd['t']
+            t.append(_t)
+            total_energy.append(0.5 * np.sum(array.m[:] * (array.u[:]**2. +
+                                                           array.v[:]**2.)))
+
+        import matplotlib
+        import os
+        # matplotlib.use('Agg')
+
+        from matplotlib import pyplot as plt
+
+        # res = os.path.join(self.output_dir, "results.npz")
+        # np.savez(res, t=t, amplitude=amplitude)
+
+        # gtvf data
+        # data = np.loadtxt('./oscillating_plate.csv', delimiter=',')
+        # t_gtvf, amplitude_gtvf = data[:, 0], data[:, 1]
+
+        plt.clf()
+
+        # plt.plot(t_gtvf, amplitude_gtvf, "s-", label='GTVF Paper')
+        plt.plot(t, total_energy, "-", label='Simulated')
+
+        plt.xlabel('t')
+        plt.ylabel('total energy')
+        plt.legend()
+        fig = os.path.join(self.output_dir, "total_energy_vs_t.png")
+        plt.show()
+        plt.savefig(fig, dpi=300)
 
 
 if __name__ == '__main__':
     app = Case0()
     app.run()
+    app.post_process(app.info_filename)

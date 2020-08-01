@@ -1,0 +1,7 @@
+* 2D Rigid body dynamics
+
+
+** Moment of inertia of a body about center of mass in inertial frame
+
+   Consider a body in x-y plane. Compute its moment of inertia about z-axis
+   about its center of mass.
