@@ -11,6 +11,7 @@ from pysph.sph.integrator import EPECIntegrator
 from pysph.solver.application import Application
 from pysph.sph.scheme import SchemeChooser
 from rigid_body_2d import RigidBody2DScheme
+from rigid_body_3d import RigidBody3DScheme
 
 from pysph.examples.solid_mech.impact import add_properties
 
@@ -24,14 +25,15 @@ class Case0(Application):
         self.kn = 1e4
         self.mu = 0.5
         self.en = 1.0
-        self.dim = 3
+        self.dim = 2
 
         self.dt = 1e-3
         self.tf = 1.18 * 1e-2
 
     def create_scheme(self):
         rb2d = RigidBody2DScheme(rigid_bodies=['body'], boundaries=None, dim=2)
-        s = SchemeChooser(default='rb2d', rb2d=rb2d)
+        rb3d = RigidBody3DScheme(rigid_bodies=['body'], boundaries=None, dim=2)
+        s = SchemeChooser(default='rb2d', rb2d=rb2d, rb3d=rb3d)
         return s
 
     def configure_scheme(self):
@@ -52,14 +54,15 @@ class Case0(Application):
         body = get_particle_array(name='body', x=x, y=y, h=h, m=m, rad_s=rad_s)
         body_id = np.zeros(len(x), dtype=int)
         body.add_property('body_id', type='int', data=body_id)
-        print(body.body_id)
 
         # setup the properties
         self.scheme.setup_properties([body])
 
+        self.scheme.scheme.set_linear_velocity(body, np.array([0.5, 0.5, 0.]))
+        self.scheme.scheme.set_angular_velocity(body, np.array([0., 0., 1.]))
         body.vcm[0] = 0.5
         body.vcm[1] = 0.5
-        body.omega[2] = 10.
+        body.omega[2] = 1.
 
         return [body]
 
@@ -72,11 +75,14 @@ class Case0(Application):
         files = self.output_files
         files = files[3:]
         t, total_energy = [], []
-        for sd, array in iter_output(files, 'body'):
+        x, y = [], []
+        for sd, body in iter_output(files, 'body'):
             _t = sd['t']
             t.append(_t)
-            total_energy.append(0.5 * np.sum(array.m[:] * (array.u[:]**2. +
-                                                           array.v[:]**2.)))
+            total_energy.append(0.5 * np.sum(body.m[:] * (body.u[:]**2. +
+                                                           body.v[:]**2.)))
+            x.append(body.xcm[0])
+            y.append(body.xcm[1])
 
         import matplotlib
         import os
@@ -100,8 +106,11 @@ class Case0(Application):
         plt.ylabel('total energy')
         plt.legend()
         fig = os.path.join(self.output_dir, "total_energy_vs_t.png")
-        plt.show()
-        plt.savefig(fig, dpi=300)
+        # plt.show()
+        # plt.savefig(fig, dpi=300)
+
+        plt.plot(x, y, label='Simulated')
+        # plt.show()
 
 
 if __name__ == '__main__':
