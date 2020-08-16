@@ -30,7 +30,6 @@ from rigid_body_common import (
 from numpy import sin, cos
 
 
-
 class LeapFrogRigidBody2DStep(IntegratorStep):
     """
     This step has to be used when Leap frog integrator is used

@@ -94,7 +94,9 @@ def set_body_frame_position_vectors(pa):
             pa.dz0[j] = pa.z[j] - cm_i[2]
 
 
-
+def set_body_frame_normal_vectors(pa):
+    """Save the normal vectors w.r.t body frame"""
+    pa.normal0[:] = pa.normal[:]
 
 
 class BodyForce(Equation):
