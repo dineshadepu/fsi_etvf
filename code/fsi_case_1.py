@@ -24,7 +24,7 @@ from pysph.tools.geometry import rotate
 
 # from boundary_particles import (add_boundary_identification_properties,
 #                                 get_boundary_identification_etvf_equations)
-from fluid_structure_coupling import FSIScheme
+from fluid_structure_interaction import FSIScheme
 
 
 def get_fixed_beam(beam_length, beam_height, beam_inside_length,

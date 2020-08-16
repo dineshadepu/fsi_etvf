@@ -49,11 +49,11 @@ class RigidFluidCoupling(Application):
 
         m = self.fluid_density * self.fluid_spacing**2.
 
-        fluid = get_particle_array_wcsph(x=xf, y=yf, m=m, h=self.h,
-                                         rho=self.fluid_density)
+        fluid = get_particle_array(x=xf, y=yf, m=m, h=self.h,
+                                   rho=self.fluid_density, name="fluid")
 
-        tank = get_particle_array_wcsph(x=xt, y=yt, m=m, m_fluid=m, h=self.h,
-                                        rho=self.fluid_density)
+        tank = get_particle_array(x=xt, y=yt, m=m, m_fluid=m, h=self.h,
+                                  rho=self.fluid_density, name="tank")
 
         self.scheme.setup_properties([fluid, tank])
 
