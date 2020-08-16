@@ -88,6 +88,38 @@ class MomentumEquationPressureGradientBoundary(Equation):
         d_aw[d_idx] += tmp * DWIJ[2]
 
 
+class LiuFluidForce(Equation):
+    """Force between a solid sphere and a SPH fluid particle.  This is
+    implemented using Akinci's[1] force and additional force from solid
+    bodies pressure which is implemented by Liu[2]
+
+    [1]'Versatile Rigid-Fluid Coupling for Incompressible SPH'
+
+    URL: https://graphics.ethz.ch/~sobarbar/papers/Sol12/Sol12.pdf
+
+    [2]A 3D Simulation of a Moving Solid in Viscous Free-Surface Flows by
+    Coupling SPH and DEM
+
+    https://doi.org/10.1155/2017/3174904
+
+
+    Note: Here forces for both the phases are added at once.
+          Please make sure that this force is applied only once
+          for both the particle properties.
+
+    """
+    def __init__(self, dest, sources):
+        super(LiuFluidForce, self).__init__(dest, sources)
+
+    def loop(self, d_idx, d_m, d_rho, d_p, s_idx, d_fx, d_fy, d_fz, DWIJ, s_m,
+             s_p, s_rho):
+        _t1 = s_p[s_idx] / (s_rho[s_idx]**2) + d_p[d_idx] / (d_rho[d_idx]**2)
+
+        d_fx[d_idx] -= d_m[d_idx] * s_m[s_idx] * _t1 * DWIJ[0]
+        d_fy[d_idx] -= d_m[d_idx] * s_m[s_idx] * _t1 * DWIJ[1]
+        d_fz[d_idx] -= d_m[d_idx] * s_m[s_idx] * _t1 * DWIJ[2]
+
+
 class FluidStep(IntegratorStep):
     def initialize(self, d_idx, d_x0, d_y0, d_z0, d_x, d_y, d_z, d_u0, d_v0,
                    d_w0, d_u, d_v, d_w, d_rho0, d_rho):
@@ -459,8 +491,6 @@ class RigidFluidCouplingScheme(Scheme):
                 if len(boundaries) > 0:
                     g2.append(ContinuitySolid(dest=name, sources=boundaries))
 
-                # This is required since MomentumEquation (ME) adds artificial
-                # viscosity (AV), so make alpha 0.0 for ME and enable delta sph AV.
                 alpha = self.alpha
                 g2.append(
                     MomentumEquationPressureGradient(dest=name,
@@ -477,6 +507,30 @@ class RigidFluidCouplingScheme(Scheme):
                     g2.insert(-1, eq)
             equations.append(Group(equations=g2))
 
+        # Handle rigid bodies
+        # add the body force
+        if len(self.rigid_bodies) > 0:
+            g5 = []
+            for name in self.rigid_bodies:
+                g5.append(
+                    BodyForce(dest=name,
+                              sources=None,
+                              gx=self.gx,
+                              gy=self.gy,
+                              gz=self.gz))
+
+            equations.append(Group(equations=g5, real=False))
+
+            # add the force due to fluid
+            if len(self.fluids) > 0:
+                g6 = []
+                for name in self.rigid_bodies:
+                    g6.append(
+                        LiuFluidForce(dest=name,
+                                      sources=self.fluids,
+                                      ))
+
+                equations.append(Group(equations=g6, real=False))
         # computation of total force and torque at cener of mass
         g6 = []
         for name in self.rigid_bodies:
@@ -623,7 +677,8 @@ class RigidFluidCouplingScheme(Scheme):
             # normal vectors in terms of body frame
             set_body_frame_normal_vectors(pa)
 
-            # properties for pressure extrapolation
+            # Adami boundary conditions. SetWallVelocity
+            add_properties(pa, 'ug', 'vf', 'vg', 'wg', 'uf', 'wf', 'wij')
             pa.add_property('wij')
 
             pa.set_output_arrays([
