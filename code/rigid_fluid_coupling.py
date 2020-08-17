@@ -527,10 +527,10 @@ class RigidFluidCouplingScheme(Scheme):
                 for name in self.rigid_bodies:
                     g6.append(
                         LiuFluidForce(dest=name,
-                                      sources=self.fluids,
-                                      ))
+                                      sources=self.fluids))
 
                 equations.append(Group(equations=g6, real=False))
+
         # computation of total force and torque at cener of mass
         g6 = []
         for name in self.rigid_bodies:
