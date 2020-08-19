@@ -28,7 +28,7 @@ class Case0(Application):
         self.dim = 2
 
         self.dt = 1e-3
-        self.tf = 0.1
+        self.tf = 10
 
     def create_scheme(self):
         rb2d = RigidBody2DScheme(rigid_bodies=['body'], boundaries=None, dim=2)
