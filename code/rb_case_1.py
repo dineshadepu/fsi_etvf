@@ -10,7 +10,6 @@ from pysph.base.utils import get_particle_array
 from pysph.sph.integrator import EPECIntegrator
 from pysph.solver.application import Application
 from pysph.sph.scheme import SchemeChooser
-from rigid_body_2d import RigidBody2DScheme
 from rigid_body_3d import RigidBody3DScheme
 
 from pysph.examples.solid_mech.impact import add_properties
@@ -31,9 +30,8 @@ class Case0(Application):
         self.tf = 10
 
     def create_scheme(self):
-        rb2d = RigidBody2DScheme(rigid_bodies=['body'], boundaries=None, dim=2)
         rb3d = RigidBody3DScheme(rigid_bodies=['body'], boundaries=None, dim=2)
-        s = SchemeChooser(default='rb2d', rb2d=rb2d, rb3d=rb3d)
+        s = SchemeChooser(default='rb3d', rb3d=rb3d)
         return s
 
     def configure_scheme(self):
@@ -60,9 +58,10 @@ class Case0(Application):
 
         self.scheme.scheme.set_linear_velocity(body, np.array([0.5, 0.5, 0.]))
         self.scheme.scheme.set_angular_velocity(body, np.array([0., 0., 1.]))
-        body.vcm[0] = 0.5
-        body.vcm[1] = 0.5
-        body.omega[2] = 1.
+
+        # body.vcm[0] = 0.5
+        # body.vcm[1] = 0.5
+        # body.omega[2] = 1.
 
         return [body]
 
@@ -80,7 +79,7 @@ class Case0(Application):
             _t = sd['t']
             t.append(_t)
             total_energy.append(0.5 * np.sum(body.m[:] * (body.u[:]**2. +
-                                                           body.v[:]**2.)))
+                                                          body.v[:]**2.)))
             x.append(body.xcm[0])
             y.append(body.xcm[1])
 

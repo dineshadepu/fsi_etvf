@@ -102,6 +102,39 @@ def get_fluid_tank_3d(fluid_length,
     return xf, yf, zf, xt, yt, zt
 
 
+def create_tank_2d_from_block_2d(xf, yf, tank_length, tank_height,
+                                 tank_spacing, tank_layers):
+    """
+    This is mainly used by granular flows
+
+    Tank particles radius is spacing / 2.
+    """
+    ####################################
+    # create the left wall of the tank #
+    ####################################
+    xleft, yleft = get_2d_block(dx=tank_spacing,
+                                length=(tank_layers - 1) * tank_spacing,
+                                height=tank_height,
+                                center=[0., 0.])
+    xleft += min(xf) - max(xleft) - tank_spacing
+    yleft += min(yf) - min(yleft)
+
+    xright = xleft + abs(min(xleft)) + tank_length + tank_spacing
+    yright = yleft
+
+    xbottom, ybottom = get_2d_block(dx=tank_spacing,
+                                    length=max(xright) - min(xleft),
+                                    height=(tank_layers - 1) * tank_spacing,
+                                    center=[0., 0.])
+    xbottom += min(xleft) - min(xbottom)
+    ybottom += min(yleft) - max(ybottom) - tank_spacing
+
+    x = np.concatenate([xleft, xright, xbottom])
+    y = np.concatenate([yleft, yright, ybottom])
+
+    return x, y
+
+
 def test_hydrostatic_tank():
     xf, yf, xt, yt = hydrostatic_tank_2d(1., 1., 1.5, 3, 0.1, 0.1 / 2.)
     plt.scatter(xt, yt)
@@ -110,4 +143,13 @@ def test_hydrostatic_tank():
     plt.show()
 
 
-# test_hydrostatic_tank()
+def test_create_tank_2d_from_block_2d():
+    xf, yf = get_2d_block(0.1, 1., 1.)
+    xt, yt = create_tank_2d_from_block_2d(xf, yf, 2., 2., 0.1, 3)
+    plt.scatter(xt, yt)
+    plt.scatter(xf, yf)
+    plt.axes().set_aspect('equal', 'datalim')
+    plt.show()
+
+
+# test_create_tank_2d_from_block_2d()
