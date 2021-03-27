@@ -168,7 +168,31 @@ happening only in the case with gravity and solving such is fun.
 \subsection{Dam break with elastic gate}
 \label{sec:dam-break-elastic-gate}
 
-This is to test fluid structure interaction.
+A block of fluid, which is suddenly released under gravity hits an elastic
+plate. This benchmark is simulated in many papers.
+
+The material properties of the elastic gate are as follows, and Young's
+modulus of $0.01 GPa$ with a Poisson ratio of $0.35$ and a density of
+$2500 kg/m^3$.
+
+The length of the fluid block is taken as $0.1m$, and the height is $0.3m$,
+and the length of the elastic gate is $0.03m$ with a height of $0.05m$ and is
+placed at a distance of $0.1m$ from the end of the fluid block.
+
+
+As the simulation starts the fluid starts flowing under the influence of
+gravity and after some time, it hits the elastic gate. Due to the influence of
+the fluid the elastic gate deforms and due to the elastic gate the fluid
+starts raising. The dynamics of both mediums is influenced by one another.
+
+
+We have compared the the tip of the elastic gate with time against the
+experimental results produced by \cite{xxx}. As can be seen the results
+produced by the current scheme are accurate and are able to reproduce the
+experimental results.
+
+
+
 
 
 \subsection{Water impact onto a forefront elastic plate}
