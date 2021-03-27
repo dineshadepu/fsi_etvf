@@ -303,47 +303,63 @@ class EDACSolidEquation(Equation):
         d_ap[d_idx] = 0.0
 
     def loop(self, d_idx, s_idx, d_p, d_rho, d_c0_ref, d_u, d_v, d_w, d_uhat,
-             d_vhat, d_what, s_p, s_m, s_rho, d_ap, DWIJ, XIJ, s_ughatfs,
-             s_vghatfs, s_wghatfs, s_ugfs, s_vgfs, s_wgfs, R2IJ, VIJ, EPS):
+             d_vhat, d_what, s_p, s_m, s_rho, d_ap, DWIJ, XIJ, s_ughatfs, s_vghatfs,
+             s_wghatfs, s_ugfs, s_vgfs, s_wgfs, R2IJ, EPS):
         vhatij = declare('matrix(3)')
+        vij = declare('matrix(3)')
         vhatij[0] = d_uhat[d_idx] - s_ughatfs[s_idx]
         vhatij[1] = d_vhat[d_idx] - s_vghatfs[s_idx]
         vhatij[2] = d_what[d_idx] - s_wghatfs[s_idx]
+
+        vij[0] = d_u[d_idx] - s_ugfs[s_idx]
+        vij[1] = d_v[d_idx] - s_vgfs[s_idx]
+        vij[2] = d_w[d_idx] - s_wgfs[s_idx]
 
         cs2 = d_c0_ref[0] * d_c0_ref[0]
 
         rhoj1 = 1.0 / s_rho[s_idx]
         Vj = s_m[s_idx] * rhoj1
         rhoi = d_rho[d_idx]
+        pi = d_p[d_idx]
+        # rhoj = s_rho[s_idx]
+        pj = s_p[s_idx]
 
-        vhatij_dot_dwij = (vhatij[0] * DWIJ[0] + vhatij[1] * DWIJ[1] +
-                           vhatij[2] * DWIJ[2])
+        vij_dot_dwij = -(vij[0] * DWIJ[0] + vij[1] * DWIJ[1] +
+                         vij[2] * DWIJ[2])
+
+        vhatij_dot_dwij = -(vhatij[0] * DWIJ[0] + vhatij[1] * DWIJ[1] +
+                            vhatij[2] * DWIJ[2])
 
         # vhatij_dot_dwij = (VIJ[0]*DWIJ[0] + VIJ[1]*DWIJ[1] +
         #                    VIJ[2]*DWIJ[2])
 
         #######################################################
-        # first term on the rhs of Eq 19 of the current paper #
+        # first term on the rhs of Eq 23 of the current paper #
         #######################################################
-        d_ap[d_idx] += rhoi * Vj * cs2 * vhatij_dot_dwij
+        d_ap[d_idx] += (pi - rhoi * cs2) * Vj * vij_dot_dwij
+
+        #######################################################
+        # second term on the rhs of Eq 23 of the current paper #
+        #######################################################
+        d_ap[d_idx] += -pi * Vj * vhatij_dot_dwij
 
         ########################################################
-        # second term on the rhs of Eq 19 of the current paper #
+        # third term on the rhs of Eq 19 of the current paper #
         ########################################################
-        tmp0 = s_rho[s_idx] * (s_ughatfs[s_idx] - s_ugfs[s_idx]
-                               ) - d_rho[d_idx] * (d_uhat[d_idx] - d_u[d_idx])
+        tmp0 = pj * (s_ughatfs[s_idx] - s_ugfs[s_idx]) - pi * (d_uhat[d_idx] -
+                                                               d_u[d_idx])
 
-        tmp1 = s_rho[s_idx] * (s_vghatfs[s_idx] - s_vgfs[s_idx]
-                               ) - d_rho[d_idx] * (d_vhat[d_idx] - d_v[d_idx])
+        tmp1 = pj * (s_vghatfs[s_idx] - s_vgfs[s_idx]) - pi * (d_vhat[d_idx] -
+                                                               d_v[d_idx])
 
-        tmp2 = s_rho[s_idx] * (s_wghatfs[s_idx] - s_wgfs[s_idx]
-                               ) - d_rho[d_idx] * (d_what[d_idx] - d_w[d_idx])
+        tmp2 = pj * (s_wghatfs[s_idx] - s_wgfs[s_idx]) - pi * (d_what[d_idx] -
+                                                               d_w[d_idx])
 
         tmpdotdwij = (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
-        d_ap[d_idx] += cs2 * Vj * tmpdotdwij
+        d_ap[d_idx] += -Vj * tmpdotdwij
 
         #######################################################
-        # third term on the rhs of Eq 19 of the current paper #
+        # fourth term on the rhs of Eq 19 of the current paper #
         #######################################################
         rhoij = d_rho[d_idx] + s_rho[s_idx]
         # The viscous damping of pressure.
@@ -570,9 +586,9 @@ class EDACGTVFStep(IntegratorStep):
         d_v[d_idx] += dtb2 * d_av[d_idx]
         d_w[d_idx] += dtb2 * d_aw[d_idx]
 
-        d_uhat[d_idx] = d_u[d_idx] + dtb2 * d_auhat[d_idx]
-        d_vhat[d_idx] = d_v[d_idx] + dtb2 * d_avhat[d_idx]
-        d_what[d_idx] = d_w[d_idx] + dtb2 * d_awhat[d_idx]
+        # d_uhat[d_idx] = d_u[d_idx] + dtb2 * d_auhat[d_idx]
+        # d_vhat[d_idx] = d_v[d_idx] + dtb2 * d_avhat[d_idx]
+        # d_what[d_idx] = d_w[d_idx] + dtb2 * d_awhat[d_idx]
 
 
 class PECStep(IntegratorStep):
@@ -963,7 +979,7 @@ class ETVFScheme(Scheme):
                            help="Tolerance limit of IPST")
 
         add_bool_argument(
-            group, 'surf-p-zero', dest='surf_p_zero', default=True,
+            group, 'surf-p-zero', dest='surf_p_zero', default=False,
             help='Make the surface pressure and acceleration to be zero')
 
         choices = ["1", "2", "3", "4", "5", "6", "7", "8"]
@@ -1242,6 +1258,7 @@ class ETVFScheme(Scheme):
         from pysph.sph.wc.gtvf import (ContinuityEquationGTVF,
                                        MomentumEquationArtificialStress,
                                        MomentumEquationViscosity)
+        from pysph.sph.iisph import (SummationDensity)
         nu_edac = self._get_edac_nu()
         all = self.fluids + self.solids
         stage1 = []
@@ -1250,67 +1267,47 @@ class ETVFScheme(Scheme):
         if len(self.solids) > 0:
             for solid in self.solids:
                 eqs.append(
-                    SetWallVelocityNoSlip(dest=solid, sources=self.fluids), )
+                    SetWallVelocityFreeSlipAndNoSlip(dest=solid,
+                                                     sources=self.fluids), )
 
-                eqs.append(
-                    SolidWallPressureBC(dest=solid, sources=self.fluids,
-                                        gx=self.gx, gy=self.gy, gz=self.gz))
             stage1.append(Group(equations=eqs, real=False))
 
         if len(self.solids) > 0:
             eqs = []
             for solid in self.solids:
                 eqs.append(
-                    SetWallVelocityFreeSlip(dest=solid, sources=self.fluids))
+                    SetWallVelocityUhatFreeSlipAndNoSlip(dest=solid,
+                                                         sources=self.fluids))
+
             stage1.append(Group(equations=eqs, real=False))
-
-            eqs = []
-            for solid in self.solids:
-                eqs.append(
-                    SetWallVelocityUhatFreeSlip(dest=solid,
-                                                sources=self.fluids))
-            stage1.append(Group(equations=eqs, real=False))
-
-            eqs = []
-            for solid in self.solids:
-                eqs.append(
-                    SetWallVelocityUhatNoSlip(dest=solid, sources=self.fluids))
-            stage1.append(Group(equations=eqs, real=False))
-
-        if self.edac is False:
-            tmp = []
-            for fluid in self.fluids:
-                tmp.append(
-                    StateEquation(dest=fluid, sources=None, p0=self.pb,
-                                  rho0=self.rho0))
-
-            stage1.append(Group(equations=tmp, real=False))
 
         eqs = []
         for fluid in self.fluids:
-            eqs.append(ContinuityEquationGTVF(dest=fluid,
-                                              sources=self.fluids), )
-            # eqs.append(
-            #     ContinuityEquationETVFCorrection(dest=fluid, sources=self.fluids),
-            # )
+            if self.summation is False:
+                eqs.append(ContinuityEquationGTVF(dest=fluid,
+                                                  sources=self.fluids), )
+                eqs.append(
+                    ContinuityEquationETVFCorrection(dest=fluid, sources=self.fluids),
+                )
             if self.edac is True:
                 eqs.append(
                     EDACEquation(dest=fluid, sources=self.fluids,
                                  nu=nu_edac), )
 
         if len(self.solids) > 0:
-            for fluid in self.fluids:
-                eqs.append(
-                    ContinuitySolidEquationGTVF(dest=fluid,
-                                                sources=self.solids), )
-                # eqs.append(
-                #     ContinuitySolidEquationETVFCorrection(
-                #         dest=fluid, sources=self.solids), )
-
-                if self.edac is True:
+            if self.summation is False:
+                for fluid in self.fluids:
                     eqs.append(
-                        EDACSolidEquation(dest=fluid, sources=self.solids,
-                                          nu=nu_edac), )
+                        ContinuitySolidEquationGTVF(dest=fluid,
+                                                    sources=self.solids), )
+                    eqs.append(
+                        ContinuitySolidEquationETVFCorrection(
+                            dest=fluid, sources=self.solids), )
+
+            if self.edac is True:
+                eqs.append(
+                    EDACSolidEquation(dest=fluid, sources=self.solids,
+                                      nu=nu_edac), )
 
         stage1.append(Group(equations=eqs, real=False))
 
@@ -1329,6 +1326,35 @@ class ETVFScheme(Scheme):
 
         stage2 = []
 
+        if self.edac is False:
+            tmp = []
+            for fluid in self.fluids:
+                tmp.append(
+                    StateEquation(dest=fluid, sources=None, p0=self.pb,
+                                  rho0=self.rho0))
+
+            stage2.append(Group(equations=tmp, real=False))
+
+        if len(self.solids) > 0:
+            eqs = []
+            for solid in self.solids:
+                eqs.append(
+                    SetWallVelocityFreeSlipAndNoSlip(dest=solid, sources=self.fluids))
+
+                eqs.append(
+                    SolidWallPressureBC(dest=solid, sources=self.fluids,
+                                        gx=self.gx, gy=self.gy, gz=self.gz))
+            stage2.append(Group(equations=eqs, real=False))
+
+        # if len(self.solids) > 0:
+        #     eqs = []
+        #     for solid in self.solids:
+        #         eqs.append(
+        #             SetWallVelocityUhatFreeSlipAndNoSlip(dest=solid,
+        #                                                  sources=self.fluids))
+
+        #     stage2.append(Group(equations=eqs, real=False))
+
         eqs = []
         if self.internal_flow is not True:
             for fluid in self.fluids:
@@ -1338,16 +1364,27 @@ class ETVFScheme(Scheme):
                                              kernel_factor=self.kernel_factor))
             stage2.append(Group(eqs))
 
+        # summation density
+        if self.summation is True:
+            tmp = []
+            for fluid in self.fluids:
+                tmp.append(SummationDensity(dest=fluid, sources=all))
+
+            stage2.append(Group(equations=tmp, real=False))
+
         eqs = []
         for fluid in self.fluids:
             eqs.append(
                 MomentumEquationPressureGradient(dest=fluid, sources=all,
                                                  gx=self.gx, gy=self.gy,
                                                  gz=self.gz), )
-            # eqs.append(
-            #     MomentumEquationArtificialStress(dest=fluid, sources=self.fluids,
-            #                                      dim=self.dim),
-            # )
+
+            eqs.append(
+                MomentumEquationArtificialStress(dest=fluid,
+                                                 sources=self.fluids,
+                                                 dim=self.dim))
+            eqs.append(
+                MomentumEquationTVFDivergence(dest=fluid, sources=self.fluids))
 
             if self.pst == 'tvf':
                 eqs.append(

@@ -31,7 +31,7 @@
 
 \begin{frontmatter}
 
-  \title{Fluid structure interaction and rigid fluid coupling in SPH}
+  \title{Fluid structure interaction with ETVF}
   \author[IITB]{A Dinesh\corref{cor1}}
   \ead{adepu.dinesh.a@gmail.com}
   \author[IITB]{Prabhu Ramachandran}
@@ -63,61 +63,40 @@
 \label{sec:intro}
 
 
-\section{The SPH method}
-\label{sec:sph}
 
 
-\section{2D Rigid body dynamics}
-\label{sec:rb-2d}
 
+\section{Fluid structure coupling}
+\label{sec:fsi-coupling}
 
-\subsection{Center of mass, Linear momentum of a rigid body}
-\label{sec:center-mass}
+Coupling is handled straight forwardly in SPH. While modelling the fluid phase
+and treating the fluid-structure interactions, the structure particles are
+assumed to be boundary particles. And from the boundary handling given in
+Adami [14], we compute the pressure of the boundary particles from the
+extrapolated equation (12) and correspondingly set its density using equation
+(13). Please note that the pressure we set here are only pertaining to the fsi
+force and does not correspond to the real pressure or density of the structure
+particles.
 
-Let $N$ be an inertial frame in which a body $B$ is situated and is
-discretized into finite number of points. The center of mass is defined as \cite{rao2006dynamics}
-
-
-\begin{equation}
-  \label{eq:center-of-mass}
-  \ten{r}_{cm} = \frac{\sum_i m_i \; \ten{r}_i}{M}
-\end{equation}
-
-\noindent where $\ten{r}$ is the position vector of the point $i$ with mass
-$m_i$ in inertial frame $N$ and $M$ is the total mass of the rigid body under
-consideration.
-
-
-The linear momentum of the rigid body in the inertial frame is
-
+The force acting on the fluid particles is now computed from the pressure set
+using the adami boundary conditions and density set consequently. We mark
+particles comprising the solid as `a` and fluid as `i`, and the force acting
+on the fluid particle `i` is given as
 
 \begin{equation}
-  \label{eq:lin-mom-of-rigid-body}
-  \ten{G} = \sum_i m_i \; \ten{v}_i
+  f_i^s = -m_i \Sum_{a} m_a \bigg(\frac{p_i}{\rho_{i}^2} +
+  \frac{p_a}{\rho_{a}^2} + \Pi_{ia} \bigg) \nabla_{i} W(x_{ia})
 \end{equation}
 
+Force on the structure particle due to the fluid particle computed using
+Newton's third law. Since each structure particle experiences equal and
+opposite force as experienced by the fluid particle, the expression for the
+force on structure due to a fluid particle is
 
 \begin{equation}
-  \label{eq:center-of-mass-velocity}
-  \ten{v}_{cm} = \frac{\sum_i m_i \; \ten{v}_i}{M}
+  f_a^F = -m_i \Sum_{a} m_a \bigg(\frac{p_a}{\rho_{a}^2} +
+  \frac{p_i}{\rho_{i}^2} + \Pi_{ai} \bigg) \nabla_{a} W(x_{ai})
 \end{equation}
-
-\noindent where $\ten{v}$ is the velocity vector of the point mass $i$ as
-observed in the inertial frame. Similarly the acceleration of the center of
-mass is
-
-
-\begin{equation}
-  \label{eq:acceleration-of-rigid-body}
-  \ten{a}_{cm} = \frac{\sum_i m_i \; \ten{a}_i}{M}
-\end{equation}
-
-
-
-\section{Rigid body interaction}
-\label{sec:rigid-body-inter}
-
-As in
 
 
 
@@ -130,51 +109,50 @@ applied ocean engineering, coastal engineering, journal of fluids and
 structures, marine structures and ocean engineering papers.
 
 
+% =========================================
+% =========================================
+% start
+% =========================================
 
-\subsection{Cylinder column collapse under the action of gravity}
-\label{sec:cylinder-column-collapse}
-
-
-This benchmark is to test the contact law between the rigid bodies.
-
-
-\subsection{Regular waves interaction with a freely floating box}
-\label{sec:cylinder-column-collapse}
-
-This benchmark is used to test the interaction between fluid and rigid bodies
-aka rigid-fluid coupling. Please refer section 3.1 of \cite{dominguez2019sph}
-for further details.
-
-\subsection{Symmetric water entry of a light wedge (2D)}
-\label{sec:Symmetric-water-entry}
-
-This benchmark is also to test the interaction between fluid and rigid bodies
-aka rigid-fluid coupling. Please refer section 3.4 of
-\cite{amicarelli2015smoothed} for further details.
+\subsection{Hydrostatic water column on an elastic plate}
+\label{sec:results:hstank-elastic-plate}
 
 
-\subsection{Asymmetric water entry of a light wedge (2D)}
-\label{sec:Asymmetric-water-entry}
+In this problem we check the accuracy and stability-preserving property of the
+proposed scheme in handling the fluid structure interaction. This problem has
+been studied in Li et al. (2015), Fourey et al. (2017), Khayyer et
+al. (2018a), Hu et al. (2019), (2021), (2021) papers. This benchmark has an
+analytical solution derived in Li et al. (2015).
 
-This benchmark is also to test the interaction between fluid and rigid bodies
-aka rigid-fluid coupling. Please refer section 3.4 of
-\cite{amicarelli2015smoothed} for further details.
+We can see the problem description in figure XXX. The water column height is
+2m and has a width of 0.5m. An aluminum plate of thickness 0.05m is placed at
+the bottom of the tank.The material properties of the aluminum are as follows,
+a density of 2700 kg/m^3, an Young’s modulus of $E = 6.75 \times 10^{10} Pa$,
+and the Poisson’s ratio $\nu = 0.34$. The plate is clamped on both the
+sides. Once the simulation begins, a sudden hydrostatic pressure force is
+applied on the aluminum plate. With time the plate oscillates and comes to
+rest. We compare the static displacement of the plate with the analytical
+solution.
 
+In the current simulation a total of two particle spacing is used. One with
+$\delta x = 0.04 , 0.02m and 0.01 m$ and use quintic spline as a kernel. We
+use 1e-6, 1e-7 for timestepping of fluid, solid phases respectively. All the
+simulations are run for a total time of $t_f = 1e-4s$. In figures XXX, XXX,
+XXX we show the final positions of the particles with different particle
+resolutions. The fluid contours are pressure and the structure contours is the
+y-displacement. In figure XXX we plot the midpoint deflection with time and
+compare it with the analytical solution provided by khayyer . It can be seen
+that the results produced by the current scheme are accurate and validates the
+scheme for further use in FSI problems. We have run a convergence analysis
+with a reducing spacing and as can be seen in the figure, that as the particle
+spacing is reduced the error is reduced.
 
-\subsection{Dam break with body transport (3D)}
-\label{sec:dam-break-body}
+Also analyse any other extra plots you are planning to put.
 
-This benchmark is to test both rigid fluid coupling as well as the rigid body
-interaction. See section 3.6 of \cite{amicarelli2015smoothed} for further
-details.
+% =========================================
+% end
+% =========================================
 
-
-\subsection{Demonstrative test case: multiple body transport (3D)}
-\label{sec:demonstrative-test-case}
-
-This benchmark is to test both rigid fluid coupling as well as the rigid body
-interaction. See section 3.7 of \cite{amicarelli2015smoothed} for further
-details.
 
 
 \subsection{Elastic bar hanging under gravity}
@@ -199,6 +177,10 @@ This is to test fluid structure interaction.
 In this example the elastic plate is placed at the end. Which gets
 impacted due to the moving fluid. Further information can be found at
 section 3.2 of \cite{liu2013numerical}
+
+
+
+
 
 
 \section{Conclusions}

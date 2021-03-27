@@ -140,16 +140,14 @@ class VelocityGradient2DSolid(Equation):
         d_v10[d_idx] = 0.0
         d_v11[d_idx] = 0.0
 
-    def loop(self, d_idx, s_idx, s_m, s_rho,
-             d_v00, d_v01, d_v10, d_v11,
-             d_u, d_v, d_w, s_ug, s_vg, s_wg,
-             DWIJ):
+    def loop(self, d_idx, s_idx, s_m, s_rho, d_v00, d_v01, d_v10, d_v11, d_u,
+             d_v, d_w, s_ug, s_vg, s_wg, DWIJ):
         vij = declare('matrix(3)')
         vij[0] = d_u[d_idx] - s_ug[s_idx]
         vij[1] = d_v[d_idx] - s_vg[s_idx]
         vij[2] = d_w[d_idx] - s_wg[s_idx]
 
-        tmp = s_m[s_idx]/s_rho[s_idx]
+        tmp = s_m[s_idx] / s_rho[s_idx]
 
         d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
         d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
@@ -173,18 +171,15 @@ class VelocityGradient3DSolid(Equation):
         d_v21[d_idx] = 0.0
         d_v22[d_idx] = 0.0
 
-    def loop(self, d_idx, s_idx, s_m, s_rho,
-             d_v00, d_v01, d_v02,
-             d_v10, d_v11, d_v12,
-             d_v20, d_v21, d_v22,
-             d_u, d_v, d_w, s_ug, s_vg, s_wg,
+    def loop(self, d_idx, s_idx, s_m, s_rho, d_v00, d_v01, d_v02, d_v10, d_v11,
+             d_v12, d_v20, d_v21, d_v22, d_u, d_v, d_w, s_ug, s_vg, s_wg,
              DWIJ):
         vij = declare('matrix(3)')
         vij[0] = d_u[d_idx] - s_ug[s_idx]
         vij[1] = d_v[d_idx] - s_vg[s_idx]
         vij[2] = d_w[d_idx] - s_wg[s_idx]
 
-        tmp = s_m[s_idx]/s_rho[s_idx]
+        tmp = s_m[s_idx] / s_rho[s_idx]
 
         d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
         d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
@@ -1236,35 +1231,46 @@ class EDACEquation(Equation):
         rhoj1 = 1.0 / s_rho[s_idx]
         Vj = s_m[s_idx] * rhoj1
         rhoi = d_rho[d_idx]
+        pi = d_p[d_idx]
+        rhoj = s_rho[s_idx]
+        pj = s_p[s_idx]
 
-        vhatij_dot_dwij = (vhatij[0] * DWIJ[0] + vhatij[1] * DWIJ[1] +
-                           vhatij[2] * DWIJ[2])
+        vij_dot_dwij = -(VIJ[0] * DWIJ[0] + VIJ[1] * DWIJ[1] +
+                         VIJ[2] * DWIJ[2])
+
+        vhatij_dot_dwij = -(vhatij[0] * DWIJ[0] + vhatij[1] * DWIJ[1] +
+                            vhatij[2] * DWIJ[2])
 
         # vhatij_dot_dwij = (VIJ[0]*DWIJ[0] + VIJ[1]*DWIJ[1] +
         #                    VIJ[2]*DWIJ[2])
 
         #######################################################
-        # first term on the rhs of Eq 19 of the current paper #
+        # first term on the rhs of Eq 23 of the current paper #
         #######################################################
-        d_ap[d_idx] += rhoi * Vj * cs2 * vhatij_dot_dwij
+        d_ap[d_idx] += (pi - rhoi * cs2) * Vj * vij_dot_dwij
+
+        #######################################################
+        # second term on the rhs of Eq 23 of the current paper #
+        #######################################################
+        d_ap[d_idx] += -pi * Vj * vhatij_dot_dwij
 
         ########################################################
-        # second term on the rhs of Eq 19 of the current paper #
+        # third term on the rhs of Eq 19 of the current paper #
         ########################################################
-        tmp0 = s_rho[s_idx] * (s_uhat[s_idx] - s_u[s_idx]) - d_rho[d_idx] * (
-            d_uhat[d_idx] - d_u[d_idx])
+        tmp0 = pj * (s_uhat[s_idx] - s_u[s_idx]) - pi * (d_uhat[d_idx] -
+                                                         d_u[d_idx])
 
-        tmp1 = s_rho[s_idx] * (s_vhat[s_idx] - s_v[s_idx]) - d_rho[d_idx] * (
-            d_vhat[d_idx] - d_v[d_idx])
+        tmp1 = pj * (s_vhat[s_idx] - s_v[s_idx]) - pi * (d_vhat[d_idx] -
+                                                         d_v[d_idx])
 
-        tmp2 = s_rho[s_idx] * (s_what[s_idx] - s_w[s_idx]) - d_rho[d_idx] * (
-            d_what[d_idx] - d_w[d_idx])
+        tmp2 = pj * (s_what[s_idx] - s_w[s_idx]) - pi * (d_what[d_idx] -
+                                                         d_w[d_idx])
 
         tmpdotdwij = (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
-        d_ap[d_idx] += cs2 * Vj * tmpdotdwij
+        d_ap[d_idx] += -Vj * tmpdotdwij
 
         #######################################################
-        # third term on the rhs of Eq 19 of the current paper #
+        # fourth term on the rhs of Eq 19 of the current paper #
         #######################################################
         rhoij = d_rho[d_idx] + s_rho[s_idx]
         # The viscous damping of pressure.
@@ -1574,8 +1580,7 @@ class SolidsScheme(Scheme):
                            help="Artificial viscosity coefficients")
 
         group.add_argument("--artificial-vis-beta", action="store",
-                           dest="artificial_vis_beta", default=1.0,
-                           type=float,
+                           dest="artificial_vis_beta", default=1.0, type=float,
                            help="Artificial viscosity coefficients, beta")
 
         add_bool_argument(
@@ -1591,20 +1596,15 @@ class SolidsScheme(Scheme):
         add_bool_argument(group, 'edac', dest='edac', default=True,
                           help='Use pressure evolution equation EDAC')
 
-        add_bool_argument(
-            group, 'adami-velocity-extrapolate',
-            dest='adami_velocity_extrapolate', default=False,
-            help='Use adami velocity extrapolation')
+        add_bool_argument(group, 'adami-velocity-extrapolate',
+                          dest='adami_velocity_extrapolate', default=False,
+                          help='Use adami velocity extrapolation')
 
-        add_bool_argument(
-            group, 'no-slip',
-            dest='no_slip', default=False,
-            help='No slip bc')
+        add_bool_argument(group, 'no-slip', dest='no_slip', default=False,
+                          help='No slip bc')
 
-        add_bool_argument(
-            group, 'free-slip',
-            dest='free_slip', default=False,
-            help='Free slip bc')
+        add_bool_argument(group, 'free-slip', dest='free_slip', default=False,
+                          help='Free slip bc')
 
         choices = ['sun2019', 'ipst', 'gray', 'gtvf', 'none']
         group.add_argument(
@@ -1650,23 +1650,12 @@ class SolidsScheme(Scheme):
 
     def consume_user_options(self, options):
         _vars = [
-            'surf_p_zero',
-            'use_uhat_cont',
-            'use_uhat_velgrad',
-            'artificial_vis_alpha',
-            'shear_stress_tvf_correction',
-            'edac',
-            'pst',
-            'debug',
-            'ipst_max_iterations',
-            'ipst_tolerance',
-            'ipst_interval',
-            'kernel_choice',
-            'stiff_eos',
-            'continuity_tvf_correction',
-            'adami_velocity_extrapolate',
-            'no_slip',
-            'free_slip'
+            'surf_p_zero', 'use_uhat_cont', 'use_uhat_velgrad',
+            'artificial_vis_alpha', 'shear_stress_tvf_correction', 'edac',
+            'pst', 'debug', 'ipst_max_iterations', 'ipst_tolerance',
+            'ipst_interval', 'kernel_choice', 'stiff_eos',
+            'continuity_tvf_correction', 'adami_velocity_extrapolate',
+            'no_slip', 'free_slip'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in _vars)
         self.configure(**data)
@@ -1699,9 +1688,9 @@ class SolidsScheme(Scheme):
             return False
 
     def get_equations(self):
-        from fluids import (SetWallVelocityFreeSlip, ContinuitySolidEquation,
-                            ContinuitySolidEquationGTVF,
-                            ContinuitySolidEquationETVFCorrection)
+        # from fluids import (SetWallVelocityFreeSlip, ContinuitySolidEquation,
+        #                     ContinuitySolidEquationGTVF,
+        #                     ContinuitySolidEquationETVFCorrection)
 
         from pysph.sph.equation import Group, MultiStageEquations
         from pysph.sph.basic_equations import (ContinuityEquation,
@@ -1743,32 +1732,24 @@ class SolidsScheme(Scheme):
 
         for solid in self.solids:
             if self.use_uhat_cont is True:
-                g1.append(
-                    ContinuityEquationUhat(dest=solid, sources=all))
+                g1.append(ContinuityEquationUhat(dest=solid, sources=all))
             else:
                 g1.append(ContinuityEquation(dest=solid, sources=all))
 
             if self.continuity_tvf_correction is True:
                 g1.append(
-                    ContinuityEquationETVFCorrection(dest=solid,
-                                                     sources=all))
+                    ContinuityEquationETVFCorrection(dest=solid, sources=all))
 
             if self.use_uhat_velgrad is True:
                 if self.dim == 2:
-                    g1.append(
-                        VelocityGradient2DUhat(dest=solid,
-                                               sources=all))
+                    g1.append(VelocityGradient2DUhat(dest=solid, sources=all))
                 elif self.dim == 3:
-                    g1.append(
-                        VelocityGradient3DUhat(dest=solid,
-                                               sources=all))
+                    g1.append(VelocityGradient3DUhat(dest=solid, sources=all))
             else:
                 if self.dim == 2:
-                    g1.append(
-                        VelocityGradient2D(dest=solid, sources=all))
+                    g1.append(VelocityGradient2D(dest=solid, sources=all))
                 elif self.dim == 3:
-                    g1.append(
-                        VelocityGradient3D(dest=solid, sources=all))
+                    g1.append(VelocityGradient3D(dest=solid, sources=all))
 
             if self.shear_stress_tvf_correction is True:
                 g1.append(
@@ -1906,12 +1887,13 @@ class SolidsScheme(Scheme):
 
             if self.pst == "sun2019":
                 g4.append(
-                    ComputeAuHatETVFSun2019Solid(dest=solid,
-                                                 sources=[solid] + self.boundaries,
-                                                 mach_no=self.mach_no,
-                                                 u_max=self.u_max))
+                    ComputeAuHatETVFSun2019Solid(
+                        dest=solid, sources=[solid] + self.boundaries,
+                        mach_no=self.mach_no, u_max=self.u_max))
             elif self.pst == "gtvf":
-                g4.append(ComputeAuHatGTVF(dest=solid, sources=[solid]+self.boundaries))
+                g4.append(
+                    ComputeAuHatGTVF(dest=solid,
+                                     sources=[solid] + self.boundaries))
 
             elif self.pst == "gray":
                 g4.append(
