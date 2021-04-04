@@ -110,7 +110,7 @@ class ElasticGate(Application):
         # ================================================
         # properties related to the only fluids
         # ================================================
-        spacing = 0.05
+        spacing = 0.05 / 2.
         self.hdx = 1.0
 
         self.fluid_length = 1.0

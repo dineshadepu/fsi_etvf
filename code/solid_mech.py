@@ -35,6 +35,7 @@ from pysph.sph.integrator import Integrator
 import numpy as np
 from math import sqrt, acos
 from math import pi as M_PI
+from solid_mech_common import AddGravityToStructure
 
 
 class ContinuityEquationUhat(Equation):
@@ -974,6 +975,14 @@ class AdamiBoundaryConditionExtrapolateNoSlip(Equation):
     [3] LOQUAT: an open-source GPU-accelerated SPH solver for geotechnical modeling
 
     """
+    def __init__(self, dest, sources, gx=0.0, gy=0.0, gz=0.0):
+        self.gx = gx
+        self.gy = gy
+        self.gz = gz
+
+        super(AdamiBoundaryConditionExtrapolateNoSlip, self).__init__(
+            dest, sources)
+
     def initialize(self, d_idx, d_p, d_wij, d_s00, d_s01, d_s02, d_s11, d_s12,
                    d_s22):
         d_s00[d_idx] = 0.0
@@ -986,7 +995,8 @@ class AdamiBoundaryConditionExtrapolateNoSlip(Equation):
         d_wij[d_idx] = 0.0
 
     def loop(self, d_idx, d_wij, d_p, d_s00, d_s01, d_s02, d_s11, d_s12, d_s22,
-             s_idx, s_s00, s_s01, s_s02, s_s11, s_s12, s_s22, s_p, WIJ):
+             d_au, d_av, d_aw, s_idx, s_s00, s_s01, s_s02, s_s11, s_s12, s_s22,
+             s_p, s_rho, WIJ, XIJ):
         d_s00[d_idx] += s_s00[s_idx] * WIJ
         d_s01[d_idx] += s_s01[s_idx] * WIJ
         d_s02[d_idx] += s_s02[s_idx] * WIJ
@@ -994,7 +1004,11 @@ class AdamiBoundaryConditionExtrapolateNoSlip(Equation):
         d_s12[d_idx] += s_s12[s_idx] * WIJ
         d_s22[d_idx] += s_s22[s_idx] * WIJ
 
-        d_p[d_idx] += s_p[s_idx] * WIJ
+        gdotxij = (self.gx - d_au[d_idx])*XIJ[0] + \
+            (self.gy - d_av[d_idx])*XIJ[1] + \
+            (self.gz - d_aw[d_idx])*XIJ[2]
+
+        d_p[d_idx] += s_p[s_idx] * WIJ + s_rho[s_idx]*gdotxij*WIJ
 
         # denominator of Eq. (27)
         d_wij[d_idx] += WIJ
@@ -1493,7 +1507,8 @@ class SolidsScheme(Scheme):
                  artificial_vis_beta=0.0, artificial_stress_eps=0.3,
                  continuity_tvf_correction=False,
                  shear_stress_tvf_correction=False, kernel_choice="1",
-                 stiff_eos=False, gamma=7., pst="sun2019"):
+                 stiff_eos=False, gamma=7., pst="sun2019",
+                 gx=0., gy=0., gz=0.):
         self.solids = solids
         if boundaries is None:
             self.boundaries = []
@@ -1550,6 +1565,10 @@ class SolidsScheme(Scheme):
         self.adami_velocity_extrapolate = False
         self.no_slip = False
         self.free_slip = False
+
+        self.gx = gx
+        self.gy = gy
+        self.gz = gz
 
         self.solver = None
 
@@ -1941,6 +1960,15 @@ class SolidsScheme(Scheme):
                       condition=self.check_ipst_time))
 
             stage2.append(Group(g8, condition=self.check_ipst_time))
+
+        g9 = []
+        for solid in self.solids:
+            g9.append(AddGravityToStructure(dest=solid, sources=None,
+                                            gx=self.gx,
+                                            gy=self.gy,
+                                            gz=self.gz))
+
+        stage2.append(Group(equations=g9))
 
         return MultiStageEquations([stage1, stage2])
 

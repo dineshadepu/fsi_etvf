@@ -41,6 +41,7 @@ from pysph.sph.solid_mech.basic import (IsothermalEOS,
 from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
 
+from solid_mech_common import AddGravityToStructure
 
 
 class SolidWallPressureBCFSI(Equation):
@@ -104,19 +105,6 @@ class AccelerationOnStructureDueToFluid(Equation):
         d_au[d_idx] += tmp * DWIJ[0]
         d_av[d_idx] += tmp * DWIJ[1]
         d_aw[d_idx] += tmp * DWIJ[2]
-
-
-class AddGravityToStructure(Equation):
-    def __init__(self, dest, sources, gx=0.0, gy=0.0, gz=0.0):
-        self.gx = gx
-        self.gy = gy
-        self.gz = gz
-        super(AddGravityToStructure, self).__init__(dest, sources)
-
-    def initialize(self, d_idx, d_au, d_av, d_aw):
-        d_au[d_idx] += self.gx
-        d_av[d_idx] += self.gy
-        d_aw[d_idx] += self.gz
 
 
 class FSIScheme(Scheme):
@@ -623,7 +611,8 @@ class FSIScheme(Scheme):
             for boundary in self.structure_solids:
                 g3.append(
                     AdamiBoundaryConditionExtrapolateNoSlip(
-                        dest=boundary, sources=self.structures))
+                        dest=boundary, sources=self.structures,
+                        gx=self.gx, gy=self.gy, gz=self.gz))
             stage2.append(Group(g3))
 
         # -------------------
