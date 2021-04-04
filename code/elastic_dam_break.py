@@ -123,7 +123,7 @@ class ElasticGate(Application):
         self.tank_layers = 3
         self.tank_spacing = spacing
 
-        self.h = self.hdx * self.fluid_spacing
+        self.h_fluid = self.hdx * self.fluid_spacing
 
         # self.solid_rho = 500
         # self.m = 1000 * self.dx * self.dx
@@ -163,7 +163,7 @@ class ElasticGate(Application):
 
         self.edac_alpha = 0.5
 
-        self.edac_nu = self.edac_alpha * self.c0_gate * self.h / 8
+        self.edac_nu = self.edac_alpha * self.c0_gate * self.h_fluid / 8
 
         # attributes for Sun PST technique
         # dummy value, will be updated in consume user options
@@ -207,7 +207,7 @@ class ElasticGate(Application):
         fluid = get_particle_array(x=xf,
                                    y=yf,
                                    m=m_fluid,
-                                   h=self.h,
+                                   h=self.h_fluid,
                                    rho=self.fluid_density,
                                    name="fluid")
 
@@ -218,7 +218,7 @@ class ElasticGate(Application):
                                   y=yt,
                                   m=m_fluid,
                                   m_fluid=m_fluid,
-                                  h=self.h,
+                                  h=self.h_fluid,
                                   rho=self.fluid_density,
                                   rad_s=self.tank_spacing/2.,
                                   name="tank")
@@ -246,7 +246,7 @@ class ElasticGate(Application):
         # ===================================
         xp += self.fluid_length
         gate = get_particle_array(
-            x=xp, y=yp, m=m, h=self.h, rho=self.gate_rho0, name="gate",
+            x=xp, y=yp, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate",
             constants={
                 'E': self.gate_E,
                 'n': 4.,
@@ -261,7 +261,7 @@ class ElasticGate(Application):
         xw += self.fluid_length
         # xw += max(xf) + max(xf) / 2.
         gate_support = get_particle_array(
-            x=xw, y=yw, m=m, h=self.h, rho=self.gate_rho0, name="gate_support",
+            x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate_support",
             constants={
                 'E': self.gate_E,
                 'n': 4.,
@@ -287,19 +287,24 @@ class ElasticGate(Application):
                          structures=['gate'],
                          structure_solids=['gate_support'],
                          dim=2,
-                         rho0=0.,
-                         pb=0.,
-                         c0=0.,
-                         nu=0.,
-                         u_max=0.,
-                         mach_no=0.,
+                         h_fluid=0.,
+                         rho0_fluid=0.,
+                         pb_fluid=0.,
+                         c0_fluid=0.,
+                         nu_fluid=0.,
+                         mach_no_fluid=0.,
+                         mach_no_structure=0.,
                          gy=0.)
 
         s = SchemeChooser(default='etvf', etvf=etvf)
         return s
 
     def configure_scheme(self):
-        dt = 0.125 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
+        # dt = 0.125 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
+        # TODO: This has to be changed for solid
+        dt = 0.25 * self.h_fluid / (
+            (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
+
         print("DT: %s" % dt)
         tf = 2.
 
@@ -307,13 +312,17 @@ class ElasticGate(Application):
 
         self.scheme.configure(
             dim=2,
-            rho0=self.fluid_density,
-            pb=self.p0_fluid,
-            c0=self.c0_fluid,
-            nu=0.01,
-            u_max=1. * self.u_max_fluid,
-            mach_no=self.mach_no_fluid,
-            gy=self.gy)
+            h_fluid=self.h_fluid,
+            rho0_fluid=self.fluid_density,
+            pb_fluid=self.p0_fluid,
+            c0_fluid=self.c0_fluid,
+            nu_fluid=0.01,
+            mach_no_fluid=self.mach_no_fluid,
+            mach_no_structure=0.,
+            gy=self.gy,
+            artificial_vis_alpha=1.,
+
+        )
 
     def _make_accel_eval(self, equations, pa_arrays):
         from pysph.base.kernels import (QuinticSpline)

@@ -618,21 +618,20 @@ class CantileverBeamDeflectionWithTipload(Application):
         return [plate, wall]
 
     def configure_scheme(self):
-        self.scheme.configure(h=self.h)
         dt = self.dt
         tf = self.tf
         # c0 = self.c0
         self.ma = self.u_max / self.c0
-        self.scheme.configure(h=self.h, pb=self.pb, edac_nu=self.edac_nu,
-                              u_max=self.u_max, mach_no=self.mach_no,
+        self.scheme.configure(pb=self.pb, edac_nu=self.edac_nu,
+                              mach_no=self.mach_no,
                               hdx=self.hdx)
 
         self.scheme.configure_solver(tf=tf, dt=dt, pfreq=500)
 
     def create_scheme(self):
         solid = SolidsScheme(solids=['plate'], boundaries=['wall'], dim=2,
-                             artificial_vis_alpha=1., h=0., pb=0., edac_nu=0.,
-                             u_max=0., mach_no=0., hdx=0.)
+                             artificial_vis_alpha=1., pb=0., edac_nu=0.,
+                             mach_no=0., hdx=0.)
 
         s = SchemeChooser(default='solid', solid=solid)
         return s

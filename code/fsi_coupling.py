@@ -38,6 +38,9 @@ from pysph.sph.basic_equations import (ContinuityEquation,
                                        VelocityGradient3D, VelocityGradient2D)
 from pysph.sph.solid_mech.basic import (IsothermalEOS,
                                         HookesDeviatoricStressRate)
+from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
+                                        get_shear_modulus)
+
 
 
 class SolidWallPressureBCFSI(Equation):
@@ -103,17 +106,36 @@ class AccelerationOnStructureDueToFluid(Equation):
         d_aw[d_idx] += tmp * DWIJ[2]
 
 
+class AddGravityToStructure(Equation):
+    def __init__(self, dest, sources, gx=0.0, gy=0.0, gz=0.0):
+        self.gx = gx
+        self.gy = gy
+        self.gz = gz
+        super(AddGravityToStructure, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_au, d_av, d_aw):
+        d_au[d_idx] += self.gx
+        d_av[d_idx] += self.gy
+        d_aw[d_idx] += self.gz
+
+
 class FSIScheme(Scheme):
-    def __init__(self, fluids, structures, solids, structure_solids, dim, c0,
-                 nu, rho0, u_max, mach_no, pb=0.0, gx=0.0, gy=0.0, gz=0.0,
-                 tdamp=0.0, eps=0.0, h=0.0, kernel_factor=3, edac_alpha=0.5,
-                 alpha=0.0, pst="sun2019", debug=False, edac=False,
-                 summation=False, ipst_max_iterations=10, ipst_tolerance=0.2,
-                 ipst_interval=5, internal_flow=False, kernel_choice="1",
-                 integrator='gtvf'):
-        self.c0 = c0
-        self.nu = nu
-        self.rho0 = rho0
+    def __init__(self, fluids, structures, solids, structure_solids, dim,
+                 h_fluid, c0_fluid, nu_fluid, rho0_fluid, mach_no_fluid,
+                 mach_no_structure, pb_fluid=0.0, gx=0.0,
+                 gy=0.0, gz=0.0, artificial_vis_alpha=1.0,
+                 artificial_vis_beta=0.0,
+                 tdamp=0.0, eps=0.0, kernel_factor=3,
+                 edac_alpha=0.5, alpha=0.0, pst="sun2019", debug=False,
+                 edac=False, summation=False, ipst_max_iterations=10,
+                 ipst_tolerance=0.2, ipst_interval=5, internal_flow=False,
+                 kernel_choice="1", integrator='gtvf'):
+        self.c0_fluid = c0_fluid
+        self.rho0_fluid = rho0_fluid
+        self.nu_fluid = nu_fluid
+        self.pb_fluid = pb_fluid
+        self.h_fluid = h_fluid
+
         self.gx = gx
         self.gy = gy
         self.gz = gz
@@ -126,17 +148,18 @@ class FSIScheme(Scheme):
         self.structures = structures
         self.structure_solids = structure_solids
 
-        self.pb = pb
-        self.solver = None
-        self.h = h
         self.kernel_factor = kernel_factor
         self.edac_alpha = edac_alpha
         self.alpha = alpha
         self.pst = pst
 
         # attributes for P Sun 2019 PST technique
-        self.u_max = u_max
-        self.mach_no = mach_no
+        self.mach_no_fluid = mach_no_fluid
+        self.mach_no_structure = mach_no_structure
+
+        # structure properties
+        self.artificial_vis_alpha = artificial_vis_alpha
+        self.artificial_vis_beta = artificial_vis_beta
 
         # attributes for IPST technique
         self.ipst_max_iterations = ipst_max_iterations
@@ -154,8 +177,7 @@ class FSIScheme(Scheme):
 
         self.integrator = integrator
 
-        # edac
-        self.surf_p_zero = True
+        self.solver = None
 
         self.attributes_changed()
 
@@ -227,16 +249,16 @@ class FSIScheme(Scheme):
         vars = [
             'alpha', 'edac_alpha', 'pst', 'debug', 'ipst_max_iterations',
             'integrator', 'internal_flow', 'ipst_tolerance', 'ipst_interval',
-            'surf_p_zero', 'edac', 'summation', 'kernel_choice'
+            'edac', 'summation', 'kernel_choice'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
 
     def attributes_changed(self):
-        if self.pb is not None:
-            self.use_tvf = abs(self.pb) > 1e-14
-        if self.h is not None and self.c0 is not None:
-            self.art_nu = self.edac_alpha * self.h * self.c0 / 8
+        if self.pb_fluid is not None:
+            self.use_tvf = abs(self.pb_fluid) > 1e-14
+        if self.h_fluid is not None and self.c0_fluid is not None:
+            self.art_nu = self.edac_alpha * self.h_fluid * self.c0_fluid / 8
 
         if self.kernel_choice == "1":
             self.kernel = QuinticSpline
@@ -279,17 +301,17 @@ class FSIScheme(Scheme):
                 steppers[fluid] = step_cls()
         integrator = cls(**steppers)
 
-        # # structure stepper
-        # if self.edac is True:
-        #     step_cls = SolidMechStepEDAC
-        # else:
-        #     step_cls = SolidMechStep
+        # structure stepper
+        if self.edac is True:
+            step_cls = SolidMechStepEDAC
+        else:
+            step_cls = SolidMechStep
 
-        # for name in self.structures:
-        #     if name not in steppers:
-        #         steppers[name] = step_cls()
+        for name in self.structures:
+            if name not in steppers:
+                steppers[name] = step_cls()
 
-        # integrator = cls(**steppers)
+        integrator = cls(**steppers)
 
         from pysph.solver.solver import Solver
         self.solver = Solver(dim=self.dim, integrator=integrator,
@@ -317,6 +339,10 @@ class FSIScheme(Scheme):
             MomentumEquationPressureGradient, MomentumEquationTVFDivergence,
             MomentumEquationViscosityNoSlip, MakeAuhatZero,
             CheckUniformityIPSTFluidInternalFlow, setup_ipst_fluids)
+
+        from solid_mech import (AdamiBoundaryConditionExtrapolateNoSlip,
+                                MomentumEquationSolids,
+                                ComputeAuHatETVFSun2019Solid)
         nu_edac = self._get_edac_nu()
         all = self.fluids + self.solids
         stage1 = []
@@ -408,6 +434,7 @@ class FSIScheme(Scheme):
             #         EDACSolidEquation(dest=fluid, sources=self.solids,
             #                           nu=nu_edac), )
 
+        # TODO: Should we use direct density or the density of the fluid
         if len(self.structures) > 0:
             for fluid in self.fluids:
                 eqs.append(
@@ -416,6 +443,7 @@ class FSIScheme(Scheme):
                 eqs.append(
                     ContinuitySolidEquationETVFCorrection(
                         dest=fluid, sources=self.structures), )
+
         if len(self.structure_solids) > 0:
             for fluid in self.fluids:
                 eqs.append(
@@ -431,42 +459,42 @@ class FSIScheme(Scheme):
         # fluid equations ends
         # =========================#
 
-        # # =========================#
-        # # structure equations
-        # # =========================#
-        # all = self.structures + self.structure_solids
-        # g1 = []
+        # =========================#
+        # structure equations
+        # =========================#
+        all = self.structures + self.structure_solids
+        g1 = []
 
-        # for solid in self.solids:
-        #     g1.append(ContinuityEquationUhat(dest=solid, sources=all))
-        #     g1.append(ContinuityEquationETVFCorrection(dest=solid,
-        #                                                sources=all))
+        for structure in self.structures:
+            g1.append(ContinuityEquationUhat(dest=structure, sources=all))
+            g1.append(ContinuityEquationETVFCorrection(dest=structure,
+                                                       sources=all))
 
-        #     if self.dim == 2:
-        #         g1.append(VelocityGradient2D(dest=solid, sources=all))
-        #     elif self.dim == 3:
-        #         g1.append(VelocityGradient3D(dest=solid, sources=all))
+            if self.dim == 2:
+                g1.append(VelocityGradient2D(dest=structure, sources=all))
+            elif self.dim == 3:
+                g1.append(VelocityGradient3D(dest=structure, sources=all))
 
-        # stage1.append(Group(equations=g1))
+        stage1.append(Group(equations=g1))
 
-        # g2 = []
-        # for solid in self.solids:
-        #     g2.append(HookesDeviatoricStressRate(dest=solid, sources=None))
+        g2 = []
+        for structure in self.structures:
+            g2.append(HookesDeviatoricStressRate(dest=structure, sources=None))
 
-        # stage1.append(Group(equations=g2))
+        stage1.append(Group(equations=g2))
 
-        # # # edac pressure evolution equation
-        # # if self.edac is True:
-        # #     gtmp = []
-        # #     for solid in self.solids:
-        # #         gtmp.append(
-        # #             EDACEquation(dest=solid, sources=all, nu=self.edac_nu))
+        # # edac pressure evolution equation
+        # if self.edac is True:
+        #     gtmp = []
+        #     for solid in self.solids:
+        #         gtmp.append(
+        #             EDACEquation(dest=solid, sources=all, nu=self.edac_nu))
 
-        # #     stage1.append(Group(gtmp))
+        #     stage1.append(Group(gtmp))
 
-        # # =========================#
-        # # structure equations ends
-        # # =========================#
+        # =========================#
+        # structure equations ends
+        # =========================#
 
         # =========================#
         # stage 2 equations start
@@ -479,8 +507,8 @@ class FSIScheme(Scheme):
         for fluid in self.fluids:
             tmp.append(
                 # TODO: THESE PRESSURE VALUES WILL BE DIFFERENT FOR DIFFERENT PHASES
-                StateEquation(dest=fluid, sources=None, p0=self.pb,
-                              rho0=self.rho0))
+                StateEquation(dest=fluid, sources=None, p0=self.pb_fluid,
+                              rho0=self.rho0_fluid))
 
         stage2.append(Group(equations=tmp, real=False))
 
@@ -507,6 +535,7 @@ class FSIScheme(Scheme):
                 eqs.append(
                     SolidWallPressureBCFSI(dest=structure, sources=self.fluids,
                                            gx=self.gx, gy=self.gy, gz=self.gz))
+
             stage2.append(Group(equations=eqs, real=False))
 
         if len(self.structure_solids) > 0:
@@ -523,12 +552,12 @@ class FSIScheme(Scheme):
             stage2.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure
 
+        # fluid momentum equations
         eqs = []
         if self.internal_flow is not True:
             for fluid in self.fluids:
                 eqs.append(
                     SetHIJForInsideParticles(dest=fluid, sources=[fluid],
-                                             h=self.h,
                                              kernel_factor=self.kernel_factor))
             stage2.append(Group(eqs))
 
@@ -549,23 +578,88 @@ class FSIScheme(Scheme):
             eqs.append(
                 ComputeAuHatETVFSun2019(dest=fluid,
                                         sources=self.fluids + self.solids,
-                                        mach_no=self.mach_no,
-                                        u_max=self.u_max))
-            if self.nu > 0:
+                                        mach_no=self.mach_no_fluid))
+            if self.nu_fluid > 0:
                 eqs.append(
                     MomentumEquationViscosity(dest=fluid, sources=self.fluids,
-                                              nu=self.nu))
+                                              nu=self.nu_fluid))
 
                 if len(self.solids) > 0:
                     eqs.append(
                         MomentumEquationViscosityNoSlip(
-                            dest=fluid, sources=self.solids, nu=self.nu))
+                            dest=fluid, sources=self.solids, nu=self.nu_fluid))
 
             eqs.append(
                 AccelerationOnFluidDueToStructure(
                     dest=fluid, sources=self.structures + self.structure_solids), )
 
         stage2.append(Group(equations=eqs, real=True))
+        # fluid momentum equations ends
+
+        # ============================================
+        # structures momentum equations
+        # ============================================
+        g1 = []
+        g2 = []
+        g3 = []
+        g4 = []
+
+        for structure in self.structures:
+            g1.append(
+                SetHIJForInsideParticles(dest=structure, sources=[structure],
+                                         kernel_factor=self.kernel_factor))
+        stage2.append(Group(g1))
+
+        # if self.edac is False:
+        if len(self.structures) > 0.:
+            for structure in self.structures:
+                g2.append(IsothermalEOS(structure, sources=None))
+            stage2.append(Group(g2))
+
+        # -------------------
+        # boundary conditions
+        # -------------------
+        if len(self.structure_solids) > 0:
+            for boundary in self.structure_solids:
+                g3.append(
+                    AdamiBoundaryConditionExtrapolateNoSlip(
+                        dest=boundary, sources=self.structures))
+            stage2.append(Group(g3))
+
+        # -------------------
+        # solve momentum equation for solid
+        # -------------------
+        g4 = []
+        for structure in self.structures:
+            # add only if there is some positive value
+            if self.artificial_vis_alpha > 0. or self.artificial_vis_beta > 0.:
+                g4.append(
+                    MonaghanArtificialViscosity(
+                        dest=structure, sources=self.structures+self.structure_solids,
+                        alpha=self.artificial_vis_alpha,
+                        beta=self.artificial_vis_beta))
+
+            g4.append(MomentumEquationSolids(dest=structure, sources=self.structures+self.structure_solids))
+
+            g4.append(
+                ComputeAuHatETVFSun2019Solid(
+                    dest=structure, sources=[structure] + self.structure_solids,
+                    mach_no=self.mach_no_structure))
+
+            g4.append(
+                AccelerationOnStructureDueToFluid(
+                    dest=structure, sources=self.fluids), )
+
+        stage2.append(Group(g4))
+
+        # Add gravity
+        g5 = []
+        for structure in self.structures:
+            g5.append(AddGravityToStructure(dest=structure, sources=None,
+                                            gx=self.gx, gy=self.gy,
+                                            gz=self.gz))
+
+        stage2.append(Group(g5))
 
         return MultiStageEquations([stage1, stage2])
 
@@ -581,7 +675,7 @@ class FSIScheme(Scheme):
             pa.h_b[:] = pa.h[:]
 
             if 'c0_ref' not in pa.constants:
-                pa.add_constant('c0_ref', self.c0)
+                pa.add_constant('c0_ref', self.c0_fluid)
             pa.add_output_arrays(['p'])
 
             if 'wdeltap' not in pa.constants:
@@ -719,6 +813,88 @@ class FSIScheme(Scheme):
                         equations=[SmoothNormals(dest=name, sources=[name])]),
                 ], dim=self.dim)
             seval.evaluate()
+
+        # add the elastic dynamics properties
+        for structure in self.structures:
+            # we expect the solid to have Young's modulus, Poisson ration as
+            # given
+            pa = pas[structure]
+
+            # add the properties that are used by all the schemes
+            add_properties(pa, 'cs', 'v00', 'v01', 'v02', 'v10', 'v11', 'v12',
+                           'v20', 'v21', 'v22', 's00', 's01', 's02', 's11',
+                           's12', 's22', 'as00', 'as01', 'as02', 'as11',
+                           'as12', 'as22', 'arho', 'au', 'av', 'aw')
+
+            # this will change
+            kernel = self.kernel(dim=2)
+            wdeltap = kernel.kernel(rij=pa.spacing0[0], h=pa.h[0])
+            pa.add_constant('wdeltap', wdeltap)
+
+            # set the shear modulus G
+            G = get_shear_modulus(pa.E[0], pa.nu[0])
+            pa.add_constant('G', G)
+
+            # set the speed of sound
+            cs = np.ones_like(pa.x) * get_speed_of_sound(
+                pa.E[0], pa.nu[0], pa.rho_ref[0])
+            pa.cs[:] = cs[:]
+
+            c0_ref = get_speed_of_sound(pa.E[0], pa.nu[0], pa.rho_ref[0])
+            pa.add_constant('c0_ref', c0_ref)
+
+            # auhat properties are needed for gtvf, etvf but not for gray. But
+            # for the compatability with the integrator we will add
+            add_properties(pa, 'auhat', 'avhat', 'awhat', 'uhat', 'vhat',
+                           'what')
+
+            add_properties(pa, 'sigma00', 'sigma01', 'sigma02', 'sigma11',
+                           'sigma12', 'sigma22')
+
+            # output arrays
+            pa.add_output_arrays(['sigma00', 'sigma01', 'sigma11'])
+
+            # for boundary identification and for sun2019 pst
+            pa.add_property('normal', stride=3)
+            pa.add_property('normal_tmp', stride=3)
+            pa.add_property('normal_norm')
+
+            # check for boundary particle
+            pa.add_property('is_boundary', type='int')
+
+            # used to set the particles near the boundary
+            pa.add_property('h_b')
+
+            # for edac
+            if self.edac is True:
+                add_properties(pa, 'ap')
+
+            # update the h if using wendlandquinticc4
+            if self.kernel_choice == "4":
+                pa.h[:] = pa.h[:] / self.hdx * 2.
+
+            pa.add_output_arrays(['p'])
+
+        for boundary in self.structure_solids:
+            pa = pas[boundary]
+            pa.add_property('wij')
+
+            # for adami boundary condition
+
+            add_properties(pa, 'ug', 'vg', 'wg', 'uf', 'vf', 'wf', 's00',
+                           's01', 's02', 's11', 's12', 's22', 'cs', 'uhat',
+                           'vhat', 'what')
+
+            cs = np.ones_like(pa.x) * get_speed_of_sound(
+                pa.E[0], pa.nu[0], pa.rho_ref[0])
+            pa.cs[:] = cs[:]
+
+            pa.add_property('ughat')
+            pa.add_property('vghat')
+            pa.add_property('wghat')
+
+            if self.kernel_choice == "4":
+                pa.h[:] = pa.h[:] / self.hdx * 2.
 
     def get_solver(self):
         return self.solver

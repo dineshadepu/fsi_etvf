@@ -256,9 +256,7 @@ class VelocityGradient3DUhatSolid(Equation):
 
 
 class SetHIJForInsideParticles(Equation):
-    def __init__(self, dest, sources, h, kernel_factor):
-        # h value of usual particle
-        self.h = h
+    def __init__(self, dest, sources, kernel_factor):
         # depends on the kernel used
         self.kernel_factor = kernel_factor
         super(SetHIJForInsideParticles, self).__init__(dest, sources)
@@ -604,9 +602,8 @@ class ComputeKappaSun2019PST(Equation):
 
 
 class ComputeAuHatETVFSun2019(Equation):
-    def __init__(self, dest, sources, mach_no, u_max):
+    def __init__(self, dest, sources, mach_no):
         self.mach_no = mach_no
-        self.u_max = u_max
         super(ComputeAuHatETVFSun2019, self).__init__(dest, sources)
 
     def initialize(self, d_idx, d_auhat, d_avhat, d_awhat):
@@ -674,9 +671,8 @@ class ComputeAuHatETVFSun2019(Equation):
 
 
 class ComputeAuHatETVFSun2019Solid(Equation):
-    def __init__(self, dest, sources, mach_no, u_max):
+    def __init__(self, dest, sources, mach_no):
         self.mach_no = mach_no
-        self.u_max = u_max
         super(ComputeAuHatETVFSun2019Solid, self).__init__(dest, sources)
 
     def initialize(self, d_idx, d_auhat, d_avhat, d_awhat):
@@ -1490,7 +1486,7 @@ class SolidsScheme(Scheme):
     python file_name.py --edac --surface-p-zero $(rest_of_the_arguments)
 
     """
-    def __init__(self, solids, boundaries, dim, h, pb, edac_nu, u_max, mach_no,
+    def __init__(self, solids, boundaries, dim, pb, edac_nu, mach_no,
                  hdx, ipst_max_iterations=10, ipst_min_iterations=0,
                  ipst_tolerance=0.2, ipst_interval=1, use_uhat_velgrad=False,
                  use_uhat_cont=False, artificial_vis_alpha=1.0,
@@ -1507,7 +1503,6 @@ class SolidsScheme(Scheme):
         self.dim = dim
 
         # TODO: if the kernel is adaptive this will fail
-        self.h = h
         self.hdx = hdx
 
         # for Monaghan stress
@@ -1538,7 +1533,6 @@ class SolidsScheme(Scheme):
         self.pst = pst
 
         # attributes for P Sun 2019 PST technique
-        self.u_max = u_max
         self.mach_no = mach_no
 
         # attributes for IPST technique
@@ -1818,7 +1812,6 @@ class SolidsScheme(Scheme):
             for solid in self.solids:
                 g1.append(
                     SetHIJForInsideParticles(dest=solid, sources=[solid],
-                                             h=self.h,
                                              kernel_factor=self.kernel_factor))
             stage2.append(Group(g1))
 
@@ -1889,7 +1882,7 @@ class SolidsScheme(Scheme):
                 g4.append(
                     ComputeAuHatETVFSun2019Solid(
                         dest=solid, sources=[solid] + self.boundaries,
-                        mach_no=self.mach_no, u_max=self.u_max))
+                        mach_no=self.mach_no))
             elif self.pst == "gtvf":
                 g4.append(
                     ComputeAuHatGTVF(dest=solid,
