@@ -77,12 +77,26 @@ class SetWallVelocityFreeSlipAndNoSlip(Equation):
         d_vgfs[d_idx] = 2 * projection * d_normal[idx3 + 1] + d_vf[d_idx]
         d_wgfs[d_idx] = 2 * projection * d_normal[idx3 + 2] + d_wf[d_idx]
 
+        vn = (d_ugfs[d_idx]*d_normal[idx3] + d_vgfs[d_idx]*d_normal[idx3+1]
+              + d_wgfs[d_idx]*d_normal[idx3+2])
+        if vn < 0:
+            d_ugfs[d_idx] -= vn*d_normal[idx3]
+            d_vgfs[d_idx] -= vn*d_normal[idx3+1]
+            d_wgfs[d_idx] -= vn*d_normal[idx3+2]
+
         # For No slip boundary conditions
         # Dummy velocities at the ghost points using Eq. (23),
         # d_u, d_v, d_w are the prescribed wall velocities.
         d_ugns[d_idx] = 2 * d_u[d_idx] - d_uf[d_idx]
         d_vgns[d_idx] = 2 * d_v[d_idx] - d_vf[d_idx]
         d_wgns[d_idx] = 2 * d_w[d_idx] - d_wf[d_idx]
+
+        vn = (d_ugns[d_idx]*d_normal[idx3] + d_vgns[d_idx]*d_normal[idx3+1]
+              + d_wgns[d_idx]*d_normal[idx3+2])
+        if vn < 0:
+            d_ugns[d_idx] -= vn*d_normal[idx3]
+            d_vgns[d_idx] -= vn*d_normal[idx3+1]
+            d_wgns[d_idx] -= vn*d_normal[idx3+2]
 
 
 class SetWallVelocityNoSlip(Equation):
@@ -203,12 +217,26 @@ class SetWallVelocityUhatFreeSlipAndNoSlip(Equation):
         d_vghatfs[d_idx] = 2 * projection * d_normal[idx3 + 1] + d_vf[d_idx]
         d_wghatfs[d_idx] = 2 * projection * d_normal[idx3 + 2] + d_wf[d_idx]
 
+        vn = (d_ughatfs[d_idx]*d_normal[idx3] + d_vghatfs[d_idx]*d_normal[idx3+1]
+              + d_wghatfs[d_idx]*d_normal[idx3+2])
+        if vn < 0:
+            d_ughatfs[d_idx] -= vn*d_normal[idx3]
+            d_vghatfs[d_idx] -= vn*d_normal[idx3+1]
+            d_wghatfs[d_idx] -= vn*d_normal[idx3+2]
+
         # For No slip boundary conditions
         # Dummy velocities at the ghost points using Eq. (23),
         # d_u, d_v, d_w are the prescribed wall velocities.
         d_ughatns[d_idx] = 2 * d_u[d_idx] - d_uf[d_idx]
         d_vghatns[d_idx] = 2 * d_v[d_idx] - d_vf[d_idx]
         d_wghatns[d_idx] = 2 * d_w[d_idx] - d_wf[d_idx]
+
+        vn = (d_ughatns[d_idx]*d_normal[idx3] + d_vghatns[d_idx]*d_normal[idx3+1]
+              + d_wghatns[d_idx]*d_normal[idx3+2])
+        if vn < 0:
+            d_ughatns[d_idx] -= vn*d_normal[idx3]
+            d_vghatns[d_idx] -= vn*d_normal[idx3+1]
+            d_wghatns[d_idx] -= vn*d_normal[idx3+2]
 
 
 class ContinuitySolidEquationGTVF(Equation):

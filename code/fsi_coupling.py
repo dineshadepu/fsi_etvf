@@ -728,10 +728,15 @@ class FSIScheme(Scheme):
             pa.add_output_arrays(['p'])
 
             if 'wdeltap' not in pa.constants:
-                pa.add_constant('wdeltap', -1.)
+                # pa.add_constant('wdeltap', -1.)
+
+                # this will change
+                kernel = self.kernel(dim=self.dim)
+                wdeltap = kernel.kernel(rij=pa.h[0], h=pa.h[0])
+                pa.add_constant('wdeltap', wdeltap)
 
             if 'n' not in pa.constants:
-                pa.add_constant('n', 0.)
+                pa.add_constant('n', 4.)
 
             add_boundary_identification_properties(pa)
 
@@ -876,8 +881,8 @@ class FSIScheme(Scheme):
                            'as12', 'as22', 'arho', 'au', 'av', 'aw')
 
             # this will change
-            kernel = self.kernel(dim=2)
-            wdeltap = kernel.kernel(rij=pa.spacing0[0], h=pa.h[0])
+            kernel = self.kernel(dim=self.dim)
+            wdeltap = kernel.kernel(rij=pa.h[0], h=pa.h[0])
             pa.add_constant('wdeltap', wdeltap)
 
             # set the shear modulus G
