@@ -297,6 +297,56 @@ def get_fixed_beam(beam_length, beam_height, boundary_layers, spacing):
     return xb, yb, xs, ys
 
 
+def get_fixed_beam_clamped(beam_length, beam_height, beam_inside_length,
+                           boundary_layers, spacing):
+    """
+ |||=============
+ |||=============
+ |||===================================================================|
+ |||===================================================================|Beam height
+ |||===================================================================|
+ |||=============
+ |||=============
+   <------------><---------------------------------------------------->
+      Beam inside                   Beam length
+      length
+    """
+    import matplotlib.pyplot as plt
+    # create a block first
+    xb, yb = get_2d_block(dx=spacing, length=beam_length + beam_inside_length,
+                          height=beam_height)
+
+    # create a (support) block with required number of layers
+    xs1, ys1 = get_2d_block(dx=spacing, length=beam_inside_length,
+                            height=boundary_layers * spacing)
+    xs1 += np.min(xb) - np.min(xs1)
+    ys1 += np.min(yb) - np.max(ys1) - spacing
+
+    # create a (support) block with required number of layers
+    xs2, ys2 = get_2d_block(dx=spacing, length=beam_inside_length,
+                            height=boundary_layers * spacing)
+    xs2 += np.min(xb) - np.min(xs2)
+    ys2 += np.max(ys2) - np.min(yb) + spacing
+
+    xs = np.concatenate([xs1, xs2])
+    ys = np.concatenate([ys1, ys2])
+
+    xs3, ys3 = get_2d_block(dx=spacing, length=boundary_layers * spacing,
+                            height=np.max(ys) - np.min(ys))
+    xs3 += np.min(xb) - np.max(xs3) - 1. * spacing
+    # ys3 += np.max(ys2) - np.min(yb) + spacing
+
+    xs = np.concatenate([xs, xs3])
+    ys = np.concatenate([ys, ys3])
+    # plt.scatter(xs, ys, s=1)
+    # plt.scatter(xb, yb, s=1)
+    # plt.axes().set_aspect('equal', 'datalim')
+    # plt.savefig("geometry", dpi=300)
+    # plt.show()
+
+    return xb, yb, xs, ys
+
+
 class ApplyForceGradual(Equation):
     def __init__(self, dest, sources, delta_fx=0, delta_fy=0, delta_fz=0):
         self.force_increment_x = delta_fx
@@ -528,8 +578,10 @@ class CantileverBeamDeflectionWithTipload(Application):
         self.use_kgf_correction = self.options.use_kgf_correction
 
     def create_particles(self):
-        xp, yp, xw, yw = get_fixed_beam(self.L, self.H, self.wall_layers,
-                                        self.dx_plate)
+        # xp, yp, xw, yw = get_fixed_beam(self.L, self.H, self.wall_layers,
+        #                                 self.dx_plate)
+        xp, yp, xw, yw = get_fixed_beam_clamped(self.H, self.L, self.H / 2.5,
+                                                self.wall_layers, self.dx_plate)
         # make sure that the beam intersection with wall starts at the 0.
         min_xp = np.min(xp)
 

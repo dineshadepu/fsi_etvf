@@ -35,7 +35,7 @@ from boundary_particles import (add_boundary_identification_properties,
 
 from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
-from pysph.tools.geometry import get_2d_tank, get_2d_block
+from pysph.tools.geometry import get_2d_tank, get_2d_block, rotate
 from pysph.sph.scheme import add_bool_argument
 
 from compyle.api import declare
@@ -282,12 +282,31 @@ def get_fixed_beam(beam_length, beam_height, beam_inside_length,
     """
     import matplotlib.pyplot as plt
     # create a block first
-    xb, yb = get_2d_block(dx=spacing, length=beam_length,
+    xb, yb = get_2d_block(dx=spacing, length=beam_length + beam_inside_length,
                           height=beam_height)
 
-    xs, ys = get_2d_block(dx=spacing, length=(boundary_layers + 1) * spacing,
-                          height=np.max(yb) - np.min(yb))
-    xs -= max(xs) - min(xb) + spacing
+    # create a (support) block with required number of layers
+    xs1, ys1 = get_2d_block(dx=spacing, length=beam_inside_length,
+                            height=boundary_layers * spacing)
+    xs1 += np.min(xb) - np.min(xs1)
+    ys1 += np.min(yb) - np.max(ys1) - spacing
+
+    # create a (support) block with required number of layers
+    xs2, ys2 = get_2d_block(dx=spacing, length=beam_inside_length,
+                            height=boundary_layers * spacing)
+    xs2 += np.min(xb) - np.min(xs2)
+    ys2 += np.max(ys2) - np.min(yb) + spacing
+
+    xs = np.concatenate([xs1, xs2])
+    ys = np.concatenate([ys1, ys2])
+
+    xs3, ys3 = get_2d_block(dx=spacing, length=boundary_layers * spacing,
+                            height=np.max(ys) - np.min(ys))
+    xs3 += np.min(xb) - np.max(xs3) - 1. * spacing
+    # ys3 += np.max(ys2) - np.min(yb) + spacing
+
+    xs = np.concatenate([xs, xs3])
+    ys = np.concatenate([ys, ys3])
     # plt.scatter(xs, ys, s=1)
     # plt.scatter(xb, yb, s=1)
     # plt.axes().set_aspect('equal', 'datalim')
@@ -527,10 +546,13 @@ class CantileverBeamDeflectionWithTipload(Application):
         self.use_bonet_correction = self.options.use_bonet_correction
         self.use_kgf_correction = self.options.use_kgf_correction
 
+        self.gx = 0.
+        self.gy = -9.81
+        self.gz = 0.
+
     def create_particles(self):
         xp, yp, xw, yw = get_fixed_beam(self.L, self.H, self.L / 2.5,
                                         self.wall_layers, self.dx_plate)
-
         # make sure that the beam intersection with wall starts at the 0.
         min_xp = np.min(xp)
 
@@ -616,16 +638,28 @@ class CantileverBeamDeflectionWithTipload(Application):
             for i in range(dim):
                 wall.Linv[i*(dim + 1)::dim2] = 1.0
 
+        # rotate the particles
+        axis = np.array([0.0, 0.0, 1.0])
+        angle = -90
+        xp, yp, zp = rotate(plate.x, plate.y, plate.z, axis, angle)
+        plate.x, plate.y, plate.z = xp[:], yp[:], zp[:]
+
+        xw, yw, zw = rotate(wall.x, wall.y, wall.z, axis, angle)
+        wall.x, wall.y, wall.z = xw[:], yw[:], zw[:]
+
         return [plate, wall]
 
     def configure_scheme(self):
+        # self.scheme.configure(h=self.h)
         dt = self.dt
         tf = self.tf
         # c0 = self.c0
         self.ma = self.u_max / self.c0
         self.scheme.configure(pb=self.pb, edac_nu=self.edac_nu,
                               mach_no=self.mach_no,
-                              hdx=self.hdx)
+                              hdx=self.hdx,
+                             gx=self.gx, gy=self.gy,
+                             gz=self.gz)
 
         self.scheme.configure_solver(tf=tf, dt=dt, pfreq=500)
 
@@ -670,22 +704,22 @@ class CantileverBeamDeflectionWithTipload(Application):
 
             eqns.groups[-1].insert(1, Group(kgf_eqs))
 
-        # Apply external force
-        force_eqs = []
-        force_eqs.append(
-            ApplyForceGradual("plate", sources=None, delta_fx=self.delta_fx,
-                              delta_fy=self.delta_fy, delta_fz=self.delta_fz))
+        # # Apply external force
+        # force_eqs = []
+        # force_eqs.append(
+        #     ApplyForceGradual("plate", sources=None, delta_fx=self.delta_fx,
+        #                       delta_fy=self.delta_fy, delta_fz=self.delta_fz))
 
-        eqns.groups[-1].append(Group(force_eqs))
-        # print(eqns.groups[-1])
+        # eqns.groups[-1].append(Group(force_eqs))
+        # # print(eqns.groups[-1])
 
-        # Apply damping force
-        force_eqs = []
-        force_eqs.append(
-            ApplyDampingForce("plate", sources=None, c=self.damping_c))
+        # # Apply damping force
+        # force_eqs = []
+        # force_eqs.append(
+        #     ApplyDampingForce("plate", sources=None, c=self.damping_c))
 
-        eqns.groups[-1].append(Group(force_eqs))
-        # print(eqns)
+        # eqns.groups[-1].append(Group(force_eqs))
+        # # print(eqns)
 
         return eqns
 
@@ -777,4 +811,3 @@ if __name__ == '__main__':
     app.run()
     app.post_process(app.info_filename)
     # app.create_rings_geometry()
-_

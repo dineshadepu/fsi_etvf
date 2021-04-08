@@ -17,7 +17,7 @@ from pysph.examples.solid_mech.impact import add_properties
 # from pysph.examples.rigid_body.sphere_in_vessel_akinci import (create_boundary,
 #                                                                create_fluid,
 #                                                                create_sphere)
-from pysph.tools.geometry import get_2d_block
+from pysph.tools.geometry import get_2d_block, rotate
 
 from fsi_coupling import FSIScheme
 from boundary_particles import (add_boundary_identification_properties,
@@ -27,7 +27,8 @@ from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
 
 
-def get_fixed_beam(beam_length, beam_height, boundary_layers, spacing):
+def get_fixed_beam(beam_length, beam_height, beam_inside_length,
+                   boundary_layers, spacing):
     """
  |||=============
  |||=============
@@ -42,12 +43,31 @@ def get_fixed_beam(beam_length, beam_height, boundary_layers, spacing):
     """
     import matplotlib.pyplot as plt
     # create a block first
-    xb, yb = get_2d_block(dx=spacing, length=beam_length+spacing/2.,
-                          height=beam_height+spacing/2.)
+    xb, yb = get_2d_block(dx=spacing, length=beam_length + beam_inside_length,
+                          height=beam_height)
 
-    xs, ys = get_2d_block(dx=spacing, length=beam_length+spacing/2.,
-                          height=4. * spacing)
-    ys += max(yb) - min(ys) + spacing
+    # create a (support) block with required number of layers
+    xs1, ys1 = get_2d_block(dx=spacing, length=beam_inside_length,
+                            height=boundary_layers * spacing)
+    xs1 += np.min(xb) - np.min(xs1)
+    ys1 += np.min(yb) - np.max(ys1) - spacing
+
+    # create a (support) block with required number of layers
+    xs2, ys2 = get_2d_block(dx=spacing, length=beam_inside_length,
+                            height=boundary_layers * spacing)
+    xs2 += np.min(xb) - np.min(xs2)
+    ys2 += np.max(ys2) - np.min(yb) + spacing
+
+    xs = np.concatenate([xs1, xs2])
+    ys = np.concatenate([ys1, ys2])
+
+    xs3, ys3 = get_2d_block(dx=spacing, length=boundary_layers * spacing,
+                            height=np.max(ys) - np.min(ys))
+    xs3 += np.min(xb) - np.max(xs3) - 1. * spacing
+    # ys3 += np.max(ys2) - np.min(yb) + spacing
+
+    xs = np.concatenate([xs, xs3])
+    ys = np.concatenate([ys, ys3])
     # plt.scatter(xs, ys, s=1)
     # plt.scatter(xb, yb, s=1)
     # plt.axes().set_aspect('equal', 'datalim')
@@ -137,7 +157,7 @@ class ElasticGate(Application):
 
         # for boundary particles
         self.seval = None
-        self.boundary_equations = get_boundary_identification_etvf_equations(
+        self.boundary_equations_1 = get_boundary_identification_etvf_equations(
             destinations=["fluid"], sources=["fluid", "tank"],
             boundaries=None)
         # print(self.boundary_equations)
@@ -150,8 +170,8 @@ class ElasticGate(Application):
         self.H = 1.
         self.gate_spacing = self.fluid_spacing
 
-        self.gate_rho0 = 1000
-        self.gate_E = 2 * 1e6
+        self.gate_rho0 = 2700
+        self.gate_E = 2 * 1e9
         self.gate_nu = 0.3975
 
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
@@ -175,10 +195,12 @@ class ElasticGate(Application):
 
         # boundary equations
         # self.boundary_equations = get_boundary_identification_etvf_equations(
-        # destinations=["gate"], sources=["gate"])
-        # self.boundary_equations = get_boundary_identification_etvf_equations(
-        #     destinations=["gate"], sources=["gate", "wall"],
-        #     boundaries=["wall"])
+        #     destinations=["gate"], sources=["gate"])
+        self.boundary_equations_2 = get_boundary_identification_etvf_equations(
+            destinations=["gate"], sources=["gate", "gate_support"],
+            boundaries=["gate_support"])
+
+        self.boundary_equations = self.boundary_equations_1 + self.boundary_equations_2
 
         self.wall_layers = 2
 
@@ -226,7 +248,7 @@ class ElasticGate(Application):
         # =============================================
         # Only structures part particle properties
         # =============================================
-        xp, yp, xw, yw = get_fixed_beam(self.L, self.H,
+        xp, yp, xw, yw = get_fixed_beam(self.H, self.L, self.H/2.5,
                                         self.wall_layers, self.fluid_spacing)
         # make sure that the beam intersection with wall starts at the 0.
         min_xp = np.min(xp)
@@ -273,11 +295,30 @@ class ElasticGate(Application):
         self.scheme.setup_properties([fluid, tank,
                                       gate, gate_support])
 
-        gate.m_fsi[:] = self.gate_rho0 * self.fluid_spacing**2.
+        gate.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
         gate.rho_fsi[:] = self.fluid_density
 
-        gate_support.m_fsi[:] = self.gate_rho0 * self.fluid_spacing**2.
+        gate_support.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
         gate_support.rho_fsi[:] = self.fluid_density
+
+        # rotate the particles
+        axis = np.array([0.0, 0.0, 1.0])
+        angle = -90
+        xp, yp, zp = rotate(gate.x, gate.y, gate.z, axis, angle)
+        gate.x, gate.y, gate.z = xp[:], yp[:], zp[:]
+
+        xw, yw, zw = rotate(gate_support.x, gate_support.y,
+                            gate_support.z, axis, angle)
+        gate_support.x, gate_support.y, gate_support.z = xw[:], yw[:], zw[:]
+
+        # translate gate and gate support
+        x_translate = (max(fluid.x) - min(gate_support.x)) - self.fluid_spacing * 2.
+        gate.x += x_translate
+        gate_support.x += x_translate
+
+        y_translate = (max(tank.y) - max(gate_support.y)) + 3. * self.fluid_spacing
+        gate.y += y_translate
+        gate_support.y += y_translate
 
         return [fluid, tank, gate, gate_support]
 
@@ -306,7 +347,7 @@ class ElasticGate(Application):
             (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
 
         print("DT: %s" % dt)
-        tf = 2.
+        tf = 0.2
 
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=100)
 
@@ -318,7 +359,7 @@ class ElasticGate(Application):
             c0_fluid=self.c0_fluid,
             nu_fluid=0.01,
             mach_no_fluid=self.mach_no_fluid,
-            mach_no_structure=0.,
+            mach_no_structure=self.mach_no_gate,
             gy=self.gy,
             artificial_vis_alpha=1.,
 
