@@ -62,6 +62,52 @@
 \section{Introduction}
 \label{sec:intro}
 
+Some FSI introduction. Its importance in different fields. Its applications so
+far.
+
+
+In modelling FSI problems, there are mainly two ways to handle the fluid and
+structures modelling. One way is to model the fluid part with mesh based
+scheme and solids part also with mesh based scheme. Like how (cite many papers
+which have done this). Or fluid part is modelled with a particle based scheme
+and the structures part with a mesh based scheme (Cite articles which have
+done this). One more way is to model both the phases using particle based
+schemes. In this paper we use particle based method to model both the phases.
+
+
+Recently there has been very good work on modelling fsi with particle based
+methods. Specific to particle based modelling, the fluid is modelled with SPH,
+and structure is modelled with different numerical method. Few articles which
+have done in this regard are as follows, citet{hosseini2009particle} has
+modelled the structure part using EBG method, then \citet{wu2016coupled}
+modelled it with DEM, \citet{ng2020coupled} modeled it using volume
+compensated particle method (VCPM), \citet{peng2021coupling} modeled it with
+RKPM, citet{zhang2021deltasph} modeled it with Smoothed Point Interpolation
+Method (SPIM).
+
+
+Recently there have been heavy improvements to basic SPH methodology in
+modelling fluid problems. Schemes such as $\delta$ SPH, $\delta +$ SPH, TVF
+for internal flows and GTVF for external flows is been proposed. Also, many
+new strategies were proposed to in overcoming the particle homogeneity
+problem, such as IPST, which is applied in \cite{IPST paper}. Also these
+improvements take care of tensile instability problem too. Another variant of
+SPH is ISPH, todoin{please cite some ISPH papers here}.
+
+
+Using only SPH, articles have been proposed where we model both the phases
+only using SPH. To note some, \citet{He2017coupled} has modelled the fluid
+part with WCSPH, \citet{Sun2019study} with delta sph,
+\citet{zhan2019stabilized} with WCSPH but applied to 3d problems with GPU. All
+these schemes use TLSPH as to model the structure part. And papers by Abbas use
+usual Gray equations to model the structures part.
+
+
+Recently {cite our paper ETVF} has been proposed as an another extension to
+TVF to model both fluid and structures part. In the current work we couple
+purely Eulerian SPH based schemes to model the FSI problems. We take advantage
+of the accuracy of the ETVF scheme proposed in modelling the fluids. ETVF
+scheme deals with tensile instability in both fluid and solid inherently.
 
 
 
@@ -80,11 +126,11 @@ particles.
 
 The force acting on the fluid particles is now computed from the pressure set
 using the adami boundary conditions and density set consequently. We mark
-particles comprising the solid as `a` and fluid as `i`, and the force acting
-on the fluid particle `i` is given as
+particles comprising the solid as $a$ and fluid as $i$, and the force acting
+on the fluid particle $i$ is given as
 
 \begin{equation}
-  f_i^s = -m_i \Sum_{a} m_a \bigg(\frac{p_i}{\rho_{i}^2} +
+  f_i^s = -m_i \sum_{a} m_a \bigg(\frac{p_i}{\rho_{i}^2} +
   \frac{p_a}{\rho_{a}^2} + \Pi_{ia} \bigg) \nabla_{i} W(x_{ia})
 \end{equation}
 
@@ -94,7 +140,7 @@ opposite force as experienced by the fluid particle, the expression for the
 force on structure due to a fluid particle is
 
 \begin{equation}
-  f_a^F = -m_i \Sum_{a} m_a \bigg(\frac{p_a}{\rho_{a}^2} +
+  f_a^F = -m_i \sum_{a} m_a \bigg(\frac{p_a}{\rho_{a}^2} +
   \frac{p_i}{\rho_{i}^2} + \Pi_{ai} \bigg) \nabla_{a} W(x_{ai})
 \end{equation}
 
@@ -107,6 +153,14 @@ force on structure due to a fluid particle is
 We can get many simple to advanced benchmarks in this area by looking at
 applied ocean engineering, coastal engineering, journal of fluids and
 structures, marine structures and ocean engineering papers.
+
+
+The papers we have followed for the benchmarks are
+\citet{sun2021accurate}, \citet{yang2016numerical}, \citet{Sun2019study},
+\citet{He2017coupled}, \citet{khayyer2018enhanced}, \citet{sun2015numerical},
+\citet{wang2020scale}, \citet{peng2021coupling}, \citet{zhang2021deltasph},
+\citet{zhan2019stabilized}, \citet{khayyer2021multi},
+\citet{long2021coupling}, \citet{ng2020coupled},
 
 
 % =========================================
@@ -127,7 +181,7 @@ analytical solution derived in Li et al. (2015).
 We can see the problem description in figure XXX. The water column height is
 2m and has a width of 0.5m. An aluminum plate of thickness 0.05m is placed at
 the bottom of the tank.The material properties of the aluminum are as follows,
-a density of 2700 kg/m^3, an Young’s modulus of $E = 6.75 \times 10^{10} Pa$,
+a density of 2700 $kg/m^3$, an Young’s modulus of $E = 6.75 \times 10^{10} Pa$,
 and the Poisson’s ratio $\nu = 0.34$. The plate is clamped on both the
 sides. Once the simulation begins, a sudden hydrostatic pressure force is
 applied on the aluminum plate. With time the plate oscillates and comes to
@@ -201,6 +255,48 @@ experimental results.
 In this example the elastic plate is placed at the end. Which gets
 impacted due to the moving fluid. Further information can be found at
 section 3.2 of \cite{liu2013numerical}
+
+
+
+
+\subsection{High speed impact of an elastic aluminum wedge on undisturbed
+  water surface}
+\label{sec:wedge-impact-on-water}
+
+Here we simulate a high speed elastic aluminum wedge impacting on undisturbed
+water surface. This benchmark was dealt in
+{A $\delta$ SPH-SPIM coupled method for fluid-structure interaction problems} and
+{abbas khayyer} papers.
+This is an attractive benchmark as it has an semi-analytical solution.
+
+A fluid of length 6 m and a height of 2.2 m is settled inside a tank of length
+6m and height 4m which gives rise to a pressure distribution of a hydrostatic
+tank. Into this hydrostatic tank a wedge of length 0.6m and a thickness of
+0.04m is been dropped with a velocity of 30 m/s. The wedge angle is 10
+degrees. Please see figure \ref{fig:half-wedge-deformable} for visual clarity.
+
+The initial particle spacing is set as 0.005m and the total number of
+particles combining the wedge, tank and fluid is TOBEDONE. The density of the
+fluid is taken as 1000 $kg/m^3$. The material properties of the wedge are as
+follows: density of 2700 $Kg/m^3$, Young's modulus of 6.75 1e10 $N/m^2$ and a
+Poisson ratio of 0.34. An artificial viscosity $alpha$ of 0.1 is used for
+fluids and 1 for solid phase.
+
+In figure \ref{wedge-entering-the-tank}, at different time stamps, we plot the
+pressure fields of water and sigma 00 if the flexible wedge. (We need to give
+some physical insight of what is expected and what is been observed, provided
+our simulations are correct)
+
+
+
+A total of three points are marked on the wedge for a qualitative validation.
+In figure \ref{point-A-wedge-displacement}, we plot the displacement of point
+A with time, and compared with Abbhas and and the semi analytical solution of
+scolon 2004. Similarly at point B and point C we compare the pressure of the
+current scheme with the one provided with Abbas and the semi analytical
+solution. It can be seen that the current scheme is able to produce the
+results with a reasonable accuracy.
+
 
 
 
