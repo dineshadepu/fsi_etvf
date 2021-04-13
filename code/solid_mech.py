@@ -603,17 +603,20 @@ class ComputeKappaSun2019PST(Equation):
 
 
 class ComputeAuHatETVFSun2019(Equation):
-    def __init__(self, dest, sources, mach_no):
+    def __init__(self, dest, sources, mach_no, dim=2):
         self.mach_no = mach_no
+        self.dim = dim
         super(ComputeAuHatETVFSun2019, self).__init__(dest, sources)
 
-    def initialize(self, d_idx, d_auhat, d_avhat, d_awhat):
+    def initialize(self, d_idx, d_div_r, d_auhat, d_avhat, d_awhat):
         d_auhat[d_idx] = 0.0
         d_avhat[d_idx] = 0.0
         d_awhat[d_idx] = 0.0
+        d_div_r[d_idx] = 0.0
 
     def loop(self, d_idx, s_idx, s_rho, s_m, d_h, d_auhat, d_avhat, d_awhat,
-             d_c0_ref, d_wdeltap, d_n, WIJ, SPH_KERNEL, DWIJ, XIJ, RIJ, dt):
+             d_div_r, d_c0_ref, d_wdeltap, d_n, WIJ, SPH_KERNEL, DWIJ, XIJ,
+             RIJ, dt):
         fab = 0.
         # this value is directly taken from the paper
         R = 0.2
@@ -630,45 +633,54 @@ class ComputeAuHatETVFSun2019(Equation):
         d_avhat[d_idx] -= tmp * tmp1 * (1. + R * fab) * DWIJ[1]
         d_awhat[d_idx] -= tmp * tmp1 * (1. + R * fab) * DWIJ[2]
 
+        d_div_r[d_idx] -= tmp1 * (XIJ[0] * DWIJ[0] +
+                                  XIJ[1] * DWIJ[1] +
+                                  XIJ[2] * DWIJ[2])
+
     def post_loop(self, d_idx, d_rho, d_h_b, d_h, d_normal, d_auhat, d_avhat,
-                  d_awhat, d_is_boundary):
+                  d_awhat, d_div_r, d_is_boundary):
+        """Save the auhat avhat awhat
+        First we make all the particles with div_r < dim - 0.5 as zero.
+
+        Now if the particle is a free surface particle and not a free particle,
+        which identified through our normal code (d_h_b < d_h), we cut off the
+        normal component
+
+        """
         idx3 = declare('int')
         idx3 = 3 * d_idx
 
-        # first put a clearance
-        magn_auhat = sqrt(d_auhat[d_idx] * d_auhat[d_idx] +
-                          d_avhat[d_idx] * d_avhat[d_idx] +
-                          d_awhat[d_idx] * d_awhat[d_idx])
+        auhat = d_auhat[d_idx]
+        avhat = d_avhat[d_idx]
+        awhat = d_awhat[d_idx]
 
-        if magn_auhat > 1e-12:
-            # tmp = min(magn_auhat, self.u_max * 0.5)
-            tmp = magn_auhat
-            d_auhat[d_idx] = tmp * d_auhat[d_idx] / magn_auhat
-            d_avhat[d_idx] = tmp * d_avhat[d_idx] / magn_auhat
-            d_awhat[d_idx] = tmp * d_awhat[d_idx] / magn_auhat
+        if d_div_r[d_idx] < self.dim - 0.5:
+            d_auhat[d_idx] = 0.
+            d_avhat[d_idx] = 0.
+            d_awhat[d_idx] = 0.
 
-            # Now apply the filter for boundary particles and adjacent particles
-            if d_h_b[d_idx] < d_h[d_idx]:
-                if d_is_boundary[d_idx] == 1:
-                    # since it is boundary make its shifting acceleration zero
-                    d_auhat[d_idx] = 0.
-                    d_avhat[d_idx] = 0.
-                    d_awhat[d_idx] = 0.
-                else:
-                    # implies this is a particle adjacent to boundary particle
+        # Now apply the filter for boundary particles and adjacent particles
+        if d_h_b[d_idx] < d_h[d_idx]:
+            if d_is_boundary[d_idx] == 1:
+                # since it is boundary make its shifting acceleration zero
+                d_auhat[d_idx] = 0.
+                d_avhat[d_idx] = 0.
+                d_awhat[d_idx] = 0.
+            else:
+                # implies this is a particle adjacent to boundary particle
 
-                    # check if the particle is going away from the continuum
-                    # or into the continuum
-                    au_dot_normal = (d_auhat[d_idx] * d_normal[idx3] +
-                                     d_avhat[d_idx] * d_normal[idx3 + 1] +
-                                     d_awhat[d_idx] * d_normal[idx3 + 2])
+                # check if the particle is going away from the continuum
+                # or into the continuum
+                au_dot_normal = (auhat * d_normal[idx3] +
+                                 avhat * d_normal[idx3 + 1] +
+                                 awhat * d_normal[idx3 + 2])
 
-                    # if it is going away from the continuum then nullify the
-                    # normal component.
-                    if au_dot_normal > 0.:
-                        d_auhat[d_idx] -= au_dot_normal * d_normal[idx3]
-                        d_avhat[d_idx] -= au_dot_normal * d_normal[idx3 + 1]
-                        d_awhat[d_idx] -= au_dot_normal * d_normal[idx3 + 2]
+                # if it is going away from the continuum then nullify the
+                # normal component.
+                if au_dot_normal > 0.:
+                    d_auhat[d_idx] = auhat - au_dot_normal * d_normal[idx3]
+                    d_avhat[d_idx] = avhat - au_dot_normal * d_normal[idx3 + 1]
+                    d_awhat[d_idx] = awhat - au_dot_normal * d_normal[idx3 + 2]
 
 
 class ComputeAuHatETVFSun2019Solid(Equation):

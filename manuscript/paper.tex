@@ -247,6 +247,40 @@ experimental results.
 
 
 
+\subsection{Hydrostatic water column on an elastic plate}
+\label{sec:hydrostatic-water-column-on-an-elastic-plate}
+
+In this problem we check the accuracy and stability-preserving property of the
+proposed scheme in handling the fluid structure interaction. This problem has
+been studied in Li et al. (2015), Fourey et al. (2017), Khayyer et
+al. (2018a), Hu et al. (2019), (2021), (2021) papers. This benchmark has an
+analytical solution derived in Li et al. (2015).
+
+We can see the problem description in figure XXX. The water column height is
+2m and has a width of 0.5m. An aluminum plate of thickness 0.05m is placed at
+the bottom of the tank.The material properties of the aluminum are as follows,
+a density of 2700 $kg/m^3$, an Young’s modulus of $E = 6.75 \times 10^{10} Pa$,
+and the Poisson’s ratio $\nu = 0.34$. The plate is clamped on both the
+sides. Once the simulation begins, a sudden hydrostatic pressure force is
+applied on the aluminum plate. With time the plate oscillates and comes to
+rest. We compare the static displacement of the plate with the analytical
+solution.
+
+In the current simulation a total of two particle spacing is used. One with
+$\delta x = 0.04 , 0.02m and 0.01 m$ and use quintic spline as a kernel. We
+use 1e-6, 1e-7 for timestepping of fluid, solid phases respectively. All the
+simulations are run for a total time of $t_f = 1e-4s$. In figures XXX, XXX,
+XXX we show the final positions of the particles with different particle
+resolutions. The fluid contours are pressure and the structure contours is the
+y-displacement. In figure XXX we plot the midpoint deflection with time and
+compare it with the analytical solution provided by khayyer. It can be seen
+that the results produced by the current scheme are accurate and validates the
+scheme for further use in FSI problems. We have run a convergence analysis
+with a reducing spacing and as can be seen in the figure, that as the particle
+spacing is reduced the error is reduced.
+
+Also analyse any other extra plots you are planning to put.
+
 
 
 \subsection{Water impact onto a forefront elastic plate}

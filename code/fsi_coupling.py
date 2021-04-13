@@ -507,32 +507,33 @@ class FSIScheme(Scheme):
         all = self.structures + self.structure_solids
         g1 = []
 
-        for structure in self.structures:
-            g1.append(ContinuityEquationUhat(dest=structure, sources=all))
-            g1.append(
-                ContinuityEquationETVFCorrection(dest=structure, sources=all))
+        if len(self.structures) > 0.:
+            for structure in self.structures:
+                g1.append(ContinuityEquationUhat(dest=structure, sources=all))
+                g1.append(
+                    ContinuityEquationETVFCorrection(dest=structure, sources=all))
 
-            if self.dim == 2:
-                g1.append(VelocityGradient2D(dest=structure, sources=all))
-            elif self.dim == 3:
-                g1.append(VelocityGradient3D(dest=structure, sources=all))
+                if self.dim == 2:
+                    g1.append(VelocityGradient2D(dest=structure, sources=all))
+                elif self.dim == 3:
+                    g1.append(VelocityGradient3D(dest=structure, sources=all))
 
-        stage1.append(Group(equations=g1))
+            stage1.append(Group(equations=g1))
 
-        g2 = []
-        for structure in self.structures:
-            g2.append(HookesDeviatoricStressRate(dest=structure, sources=None))
+            g2 = []
+            for structure in self.structures:
+                g2.append(HookesDeviatoricStressRate(dest=structure, sources=None))
 
-        stage1.append(Group(equations=g2))
+            stage1.append(Group(equations=g2))
 
-        # # edac pressure evolution equation
-        # if self.edac is True:
-        #     gtmp = []
-        #     for solid in self.solids:
-        #         gtmp.append(
-        #             EDACEquation(dest=solid, sources=all, nu=self.edac_nu))
+            # # edac pressure evolution equation
+            # if self.edac is True:
+            #     gtmp = []
+            #     for solid in self.solids:
+            #         gtmp.append(
+            #             EDACEquation(dest=solid, sources=all, nu=self.edac_nu))
 
-        #     stage1.append(Group(gtmp))
+            #     stage1.append(Group(gtmp))
 
         # =========================#
         # structure equations ends
@@ -630,11 +631,11 @@ class FSIScheme(Scheme):
                     eqs.append(
                         MomentumEquationViscosityNoSlip(
                             dest=fluid, sources=self.solids, nu=self.nu_fluid))
-
-            eqs.append(
-                AccelerationOnFluidDueToStructure(
-                    dest=fluid,
-                    sources=self.structures + self.structure_solids), )
+            if len(self.structure_solids + self.structures) > 0.:
+                eqs.append(
+                    AccelerationOnFluidDueToStructure(
+                        dest=fluid,
+                        sources=self.structures + self.structure_solids), )
 
         stage2.append(Group(equations=eqs, real=True))
         # fluid momentum equations ends
@@ -647,11 +648,12 @@ class FSIScheme(Scheme):
         g3 = []
         g4 = []
 
-        for structure in self.structures:
-            g1.append(
-                SetHIJForInsideParticles(dest=structure, sources=[structure],
-                                         kernel_factor=self.kernel_factor))
-        stage2.append(Group(g1))
+        if len(self.structures) > 0.:
+            for structure in self.structures:
+                g1.append(
+                    SetHIJForInsideParticles(dest=structure, sources=[structure],
+                                             kernel_factor=self.kernel_factor))
+            stage2.append(Group(g1))
 
         # if self.edac is False:
         if len(self.structures) > 0.:
@@ -673,42 +675,43 @@ class FSIScheme(Scheme):
         # -------------------
         # solve momentum equation for solid
         # -------------------
-        g4 = []
-        for structure in self.structures:
-            # add only if there is some positive value
-            if self.artificial_vis_alpha > 0. or self.artificial_vis_beta > 0.:
+        if len(self.structures) > 0.:
+            g4 = []
+            for structure in self.structures:
+                # add only if there is some positive value
+                if self.artificial_vis_alpha > 0. or self.artificial_vis_beta > 0.:
+                    g4.append(
+                        MonaghanArtificialViscosity(
+                            dest=structure,
+                            sources=self.structures + self.structure_solids,
+                            alpha=self.artificial_vis_alpha,
+                            beta=self.artificial_vis_beta))
+
                 g4.append(
-                    MonaghanArtificialViscosity(
+                    MomentumEquationSolids(
                         dest=structure,
-                        sources=self.structures + self.structure_solids,
-                        alpha=self.artificial_vis_alpha,
-                        beta=self.artificial_vis_beta))
+                        sources=self.structures + self.structure_solids))
 
-            g4.append(
-                MomentumEquationSolids(
-                    dest=structure,
-                    sources=self.structures + self.structure_solids))
+                g4.append(
+                    ComputeAuHatETVFSun2019Solid(
+                        dest=structure,
+                        sources=[structure] + self.structure_solids,
+                        mach_no=self.mach_no_structure))
 
-            g4.append(
-                ComputeAuHatETVFSun2019Solid(
-                    dest=structure,
-                    sources=[structure] + self.structure_solids,
-                    mach_no=self.mach_no_structure))
+                g4.append(
+                    AccelerationOnStructureDueToFluid(dest=structure,
+                                                      sources=self.fluids), )
 
-            g4.append(
-                AccelerationOnStructureDueToFluid(dest=structure,
-                                                  sources=self.fluids), )
+            stage2.append(Group(g4))
 
-        stage2.append(Group(g4))
+            # Add gravity
+            g5 = []
+            for structure in self.structures:
+                g5.append(
+                    AddGravityToStructure(dest=structure, sources=None, gx=self.gx,
+                                        gy=self.gy, gz=self.gz))
 
-        # Add gravity
-        g5 = []
-        for structure in self.structures:
-            g5.append(
-                AddGravityToStructure(dest=structure, sources=None, gx=self.gx,
-                                      gy=self.gy, gz=self.gz))
-
-        stage2.append(Group(g5))
+            stage2.append(Group(g5))
 
         return MultiStageEquations([stage1, stage2])
 
@@ -720,6 +723,8 @@ class FSIScheme(Scheme):
             )
             for prop in props:
                 pa.add_property(prop)
+
+            add_properties(pa, 'div_r')
 
             pa.h_b[:] = pa.h[:]
 
@@ -789,6 +794,7 @@ class FSIScheme(Scheme):
 
             add_properties(pa, 'm_fsi', 'p_fsi', 'rho_fsi', 'V', 'wij2', 'wij',
                            'uhat', 'vhat', 'what')
+            add_properties(pa, 'div_r')
             # add_properties(pa, 'p_fsi', 'wij', 'm_fsi', 'rho_fsi')
 
             # Adami boundary conditions. SetWallVelocity
