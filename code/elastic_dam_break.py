@@ -77,6 +77,41 @@ def get_fixed_beam(beam_length, beam_height, beam_inside_length,
     return xb, yb, xs, ys
 
 
+def get_fixed_beam_without_clamp(beam_length, beam_height, boundary_height, spacing):
+    """
+ |||=============
+ |||=============
+ |||===================================================================|
+ |||===================================================================|Beam height
+ |||===================================================================|
+ |||=============
+ |||=============
+   <------------><---------------------------------------------------->
+      Beam inside                   Beam length
+      length
+    """
+    import matplotlib.pyplot as plt
+    # create a block first
+    xb, yb = get_2d_block(dx=spacing, length=beam_length,
+                          height=beam_height)
+
+    # create a (support) block with required number of layers
+    xs1, ys1 = get_2d_block(dx=spacing, length=beam_length,
+                            height=boundary_height)
+
+    ys1 += np.min(yb) - np.max(ys1) - spacing
+
+    xs = np.concatenate([xs1])
+    ys = np.concatenate([ys1])
+    # plt.scatter(xs, ys, s=1)
+    # plt.scatter(xb, yb, s=1)
+    # plt.axes().set_aspect('equal', 'datalim')
+    # plt.savefig("geometry", dpi=300)
+    # plt.show()
+
+    return xb, yb, xs, ys
+
+
 class ElasticGate(Application):
     def add_user_options(self, group):
         group.add_argument("--rho", action="store", type=float, dest="rho",
@@ -130,16 +165,16 @@ class ElasticGate(Application):
         # ================================================
         # properties related to the only fluids
         # ================================================
-        spacing = 0.05 / 2.
+        spacing = 0.001
         self.hdx = 1.0
 
-        self.fluid_length = 1.0
-        self.fluid_height = 1.0
+        self.fluid_length = 0.1
+        self.fluid_height = 0.14
         self.fluid_density = 1000.0
         self.fluid_spacing = spacing
 
-        self.tank_height = 1.5
-        self.tank_length = 3.
+        self.tank_height = 0.15
+        self.tank_length = 0.2
         self.tank_layers = 3
         self.tank_spacing = spacing
 
@@ -158,21 +193,22 @@ class ElasticGate(Application):
         # for boundary particles
         self.seval = None
         self.boundary_equations_1 = get_boundary_identification_etvf_equations(
-            destinations=["fluid"], sources=["fluid", "tank"],
-            boundaries=None)
+            destinations=["fluid"], sources=["fluid", "tank", "gate",
+                                             "gate_support"],
+            boundaries=["tank", "gate", "gate_support"])
         # print(self.boundary_equations)
 
         # ================================================
         # properties related to the elastic gate
         # ================================================
         # elastic gate is made of rubber
-        self.L = 0.1
-        self.H = 1.
+        self.L = 0.005
+        self.H = 0.079
         self.gate_spacing = self.fluid_spacing
 
-        self.gate_rho0 = 2700
-        self.gate_E = 2 * 1e9
-        self.gate_nu = 0.3975
+        self.gate_rho0 = 1100
+        self.gate_E = 12 * 1e6
+        self.gate_nu = 0.4
 
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
@@ -187,7 +223,7 @@ class ElasticGate(Application):
 
         # attributes for Sun PST technique
         # dummy value, will be updated in consume user options
-        self.u_max_gate = 13
+        self.u_max_gate = 1
         self.mach_no_gate = self.u_max_gate / self.c0_gate
 
         # for pre step
@@ -248,18 +284,25 @@ class ElasticGate(Application):
         # =============================================
         # Only structures part particle properties
         # =============================================
-        xp, yp, xw, yw = get_fixed_beam(self.H, self.L, self.H/2.5,
-                                        self.wall_layers, self.fluid_spacing)
-        # make sure that the beam intersection with wall starts at the 0.
-        min_xp = np.min(xp)
+        with_out_clamp = True
+        if with_out_clamp is True:
+            xp, yp, xw, yw = get_fixed_beam_without_clamp(self.H, self.L,
+                                                          self.L, self.fluid_spacing)
 
-        # add this to the beam and wall
-        xp += abs(min_xp)
-        xw += abs(min_xp)
+        else:
+            xp, yp, xw, yw = get_fixed_beam(self.H, self.L, self.H/2.5,
+                                            self.wall_layers, self.fluid_spacing)
 
-        max_xw = np.max(xw)
-        xp -= abs(max_xw)
-        xw -= abs(max_xw)
+        # # make sure that the beam intersection with wall starts at the 0.
+        # min_xp = np.min(xp)
+
+        # # add this to the beam and wall
+        # xp += abs(min_xp)
+        # xw += abs(min_xp)
+
+        # max_xw = np.max(xw)
+        # xp -= abs(max_xw)
+        # xw -= abs(max_xw)
 
         m = self.gate_rho0 * self.fluid_spacing**2.
 
@@ -320,6 +363,21 @@ class ElasticGate(Application):
         gate.y += y_translate
         gate_support.y += y_translate
 
+        if with_out_clamp is True:
+            # set the gate and gate support x variables
+            # translate gate and gate support
+            x_translate = (max(fluid.x) - min(gate.x)) + self.fluid_spacing
+            gate.x += x_translate
+
+            x_translate = (max(fluid.x) - min(gate_support.x)) + self.fluid_spacing
+            gate_support.x += x_translate
+
+            y_translate = (min(tank.y) - min(gate.y)) + 3. * self.fluid_spacing
+            gate.y += y_translate
+
+            y_translate = (max(gate.y) - min(gate_support.y))
+            gate_support.y += y_translate + self.fluid_spacing
+
         return [fluid, tank, gate, gate_support]
 
     def create_scheme(self):
@@ -364,6 +422,15 @@ class ElasticGate(Application):
             artificial_vis_alpha=1.,
 
         )
+
+    def create_equations(self):
+        eqns = self.scheme.get_equations()
+
+        equation = eqns.groups[-1][5].equations[3]
+        equation.sources = ["tank", "fluid", "gate", "gate_support"]
+        print(equation)
+
+        return eqns
 
     def _make_accel_eval(self, equations, pa_arrays):
         from pysph.base.kernels import (QuinticSpline)
