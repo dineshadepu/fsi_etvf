@@ -171,8 +171,9 @@ class ElasticGate(Application):
         # for boundary particles
         self.seval = None
         self.boundary_equations_1 = get_boundary_identification_etvf_equations(
-            destinations=["fluid"], sources=["fluid", "tank", "gate"],
-            boundaries=None)
+            destinations=["fluid"], sources=["fluid", "tank", "gate",
+                                             "gate_support"],
+            boundaries=["tank", "gate", "gate_support"])
         # print(self.boundary_equations)
 
         # ================================================
@@ -351,7 +352,7 @@ class ElasticGate(Application):
             (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
 
         print("DT: %s" % dt)
-        tf = 5.
+        tf = 1.
 
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=100)
 
@@ -372,12 +373,11 @@ class ElasticGate(Application):
     def create_equations(self):
         eqns = self.scheme.get_equations()
 
-        equation = eqns.groups[-1][5].equations[3]
-        equation.sources = ["tank", "fluid", "gate"]
+        equation = eqns.groups[-1][5].equations[4]
+        equation.sources = ["tank", "fluid", "gate", "gate_support"]
         # print(equation)
 
         return eqns
-
 
     def _make_accel_eval(self, equations, pa_arrays):
         from pysph.base.kernels import (QuinticSpline)

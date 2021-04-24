@@ -334,16 +334,9 @@ class ElasticGate(Application):
                 'spacing0': self.gate_spacing,
                 'rho_ref': self.gate_rho0
             })
-
-        self.scheme.setup_properties([fluid, tank,
-                                      gate, gate_support])
-
-        gate.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
-        gate.rho_fsi[:] = self.fluid_density
-
-        gate_support.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
-        gate_support.rho_fsi[:] = self.fluid_density
-
+        # ================================
+        # Adjust the geometry
+        # ================================
         # rotate the particles
         axis = np.array([0.0, 0.0, 1.0])
         angle = -90
@@ -377,6 +370,19 @@ class ElasticGate(Application):
 
             y_translate = (max(gate.y) - min(gate_support.y))
             gate_support.y += y_translate + self.fluid_spacing
+
+        # ================================
+        # Adjust the geometry ends
+        # ================================
+
+        self.scheme.setup_properties([fluid, tank,
+                                      gate, gate_support])
+
+        gate.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
+        gate.rho_fsi[:] = self.fluid_density
+
+        gate_support.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
+        gate_support.rho_fsi[:] = self.fluid_density
 
         return [fluid, tank, gate, gate_support]
 
@@ -415,18 +421,19 @@ class ElasticGate(Application):
             rho0_fluid=self.fluid_density,
             pb_fluid=self.p0_fluid,
             c0_fluid=self.c0_fluid,
-            nu_fluid=0.01,
+            nu_fluid=0.00,
             mach_no_fluid=self.mach_no_fluid,
             mach_no_structure=self.mach_no_gate,
             gy=self.gy,
             artificial_vis_alpha=1.,
-
+            alpha=0.05
         )
 
     def create_equations(self):
         eqns = self.scheme.get_equations()
 
-        equation = eqns.groups[-1][5].equations[3]
+        print(eqns)
+        equation = eqns.groups[-1][5].equations[4]
         equation.sources = ["tank", "fluid", "gate", "gate_support"]
         print(equation)
 

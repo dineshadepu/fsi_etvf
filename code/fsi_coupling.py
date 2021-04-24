@@ -42,6 +42,7 @@ from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
 
 from solid_mech_common import AddGravityToStructure
+from pysph.sph.wc.transport_velocity import (MomentumEquationArtificialViscosity)
 
 
 class SolidWallPressureBCFSI(Equation):
@@ -606,6 +607,17 @@ class FSIScheme(Scheme):
 
         eqs = []
         for fluid in self.fluids:
+            # FIXME: Change alpha to variable
+            if self.alpha > 0.:
+                eqs.append(
+                    MomentumEquationArtificialViscosity(
+                        dest=fluid,
+                        sources=self.fluids+self.solids+self.structures+self.structure_solids,
+                        c0=self.c0_fluid,
+                        alpha=self.alpha
+                    )
+                )
+
             eqs.append(
                 MomentumEquationPressureGradient(
                     dest=fluid, sources=self.fluids + self.solids, gx=self.gx,
