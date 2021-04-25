@@ -352,7 +352,7 @@ class ElasticGate(Application):
             (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
 
         print("DT: %s" % dt)
-        tf = 1.
+        tf = 5.
 
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=100)
 
@@ -362,12 +362,12 @@ class ElasticGate(Application):
             rho0_fluid=self.fluid_density,
             pb_fluid=self.p0_fluid,
             c0_fluid=self.c0_fluid,
-            nu_fluid=0.01,
+            nu_fluid=0.0,
             mach_no_fluid=self.mach_no_fluid,
             mach_no_structure=self.mach_no_gate,
             gy=self.gy,
             artificial_vis_alpha=1.,
-
+            alpha=0.1
         )
 
     def create_equations(self):
