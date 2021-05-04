@@ -112,8 +112,106 @@ scheme deals with tensile instability in both fluid and solid inherently.
 
 
 
-\section{Fluid structure coupling}
-\label{sec:fsi-coupling}
+\section{Governing equations}
+
+
+\subsection{Discrete governing equations}
+
+In this current paper the fluid medium is modelled using the improvised scheme
+of TVF, which is been applied to the free surface flows, called ETVF.
+
+For detailed derivation we point the reader to paper \cite{cite our paper},
+here we only give the discrete equations.
+
+
+The discretized equations of the fluid medium are
+
+\begin{equation}
+  \label{eq:sph-discretization-continuity}
+  \frac{\tilde{d}\rho_a}{dt} = \sum_{b} \; \frac{m_b}{\rho_{b}} \; (
+  \rho_{a} \; \tilde{\ten{u}}_{ab} \; + \;
+  (\rho \; (\tilde{\ten{u}} \; - \;
+  \ten{u}))_{ab}) \; \cdot \nabla_{a} W_{ab},
+\end{equation}
+
+\begin{multline}
+  \label{eq:sph-discretization-edac}
+  \frac{\tilde{d}p_a}{dt} = \sum_{b} \; \frac{m_b}{\rho_{b}} \; \bigg(
+  (p_{a} - \rho_{a} c_{s}^2) \; \ten{u}_{ab} \; - \;
+  p_{a} \; \tilde{\ten{u}}_{ab} \; - \;
+  (p \; (\tilde{\ten{u}} - \ten{u}))_{ab} \; + \; \\
+  4 \; \nu_{edac}
+  \frac{p_a - p_b}{(\rho_a + \rho_b) (r^2_{ab} + EPS)} \ten{r}_{ab}
+  \bigg) \; \cdot \nabla_{a} W_{ab}
+\end{multline}
+
+
+\begin{multline}
+  \label{eq:sph-momentum-fluid}
+  \frac{\tilde{d}\ten{u}_{a}}{dt} = - \sum_{b} m_b \bigg[
+  \bigg(\frac{p_a}{\rho_a^2} + \frac{p_b}{\rho_b^2}\bigg) \ten{I} -
+  \bigg(\frac{\ten{A}_a}{\rho_a^2} + \frac{\ten{A}_b}{\rho_b^2}\bigg) \bigg]
+  \nabla_{a} W_{ab} \\
+  + \ten{u}_{a} \sum_{b} \frac{m_b}{\rho_{b}} \; \tilde{\ten{u}}_{ab} \cdot \nabla_{a} W_{ab} +
+  \ten{g}_{a}.
+\end{multline}
+
+
+\begin{equation}
+  \label{eq:sph-momentum-solid}
+  \frac{\tilde{d}\ten{u}_{a}}{dt} = - \sum_{b} m_b \bigg[
+  \bigg(\frac{p_a}{\rho_a^2} + \frac{p_b}{\rho_b^2}\bigg) \ten{I} -
+  \bigg(\frac{\teng{\sigma}^{'}_{a}}{\rho_a^2} +
+  \frac{\teng{\sigma}^{'}_{b}}{\rho_b^2}\bigg) \bigg]  \nabla_{a} W_{ab} +
+  \ten{g}_{a}.
+\end{equation}
+
+The Jaumann's formulation for Hooke's stress provides us with the rate of
+change of deviatoric stress,
+\begin{equation}
+  \label{eq:jaumann-stress-rate}
+  \frac{d \sigma'_{ij}}{dt} = 2G (\dot{\epsilon}_{ij} - \frac{1}{3}
+  \dot{\epsilon}_{ij} \delta_{ij}) + \sigma^{'}_{ik}  \Omega_{jk} +
+  \Omega_{ik} \sigma^{'}_{kj}
+\end{equation}
+where $G$ is the shear modulus, $\dot{\epsilon}_{ij}$ is the strain rate tensor,
+\begin{equation}
+  \label{eq:strain-tensor}
+  \dot{\epsilon}_{ij} = \frac{1}{2} \bigg(\frac{\partial u_i}{\partial x_j} +
+  \frac{\partial u_j}{\partial x_i} \bigg)
+\end{equation}
+and $\Omega_{ij}$ is the rotational tensor,
+\begin{equation}
+  \label{eq:rotational-tensor}
+  \Omega_{ij} = \frac{1}{2} \bigg(\frac{\partial u_i}{\partial x_j} -
+  \frac{\partial u_j}{\partial x_i} \bigg)
+\end{equation}
+
+\begin{equation}
+  \label{eq:sph-vel-grad}
+  \nabla \ten{u}_a =
+  - \sum_{b} \frac{m_b}{\rho_{b}} (\ten{u}_{a} - \ten{u}_{b}) \otimes (\nabla_{a} W_{ab}),
+\end{equation}
+
+
+In both fluid and solid modelling, the pressure is computed using an
+isothermal equation of state, given as,
+\begin{equation}
+  \label{eq:pressure-equation}
+  p = K \bigg(\frac{\rho}{\rho_{0}} - 1 \bigg),
+\end{equation}
+where $K = \rho_{0} c_0^2$ is the bulk modulus. Here, the constants $c_0$ and
+$\rho_0$ are the reference speed of sound and density, respectively.
+
+
+\subsection{Boundary conditions}
+
+
+\subsection{Time integration}
+
+
+\subsection{Coupling between fluid and solid}
+\label{subsec:fsi-coupling}
 
 Coupling is handled straight forwardly in SPH. While modelling the fluid phase
 and treating the fluid-structure interactions, the structure particles are
@@ -143,7 +241,6 @@ force on structure due to a fluid particle is
   f_a^F = -m_i \sum_{a} m_a \bigg(\frac{p_a}{\rho_{a}^2} +
   \frac{p_i}{\rho_{i}^2} + \Pi_{ai} \bigg) \nabla_{a} W(x_{ai})
 \end{equation}
-
 
 
 

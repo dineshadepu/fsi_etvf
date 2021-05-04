@@ -19,7 +19,7 @@ from pysph.examples.solid_mech.impact import add_properties
 #                                                                create_sphere)
 from pysph.tools.geometry import get_2d_block, rotate
 
-from fsi_coupling import FSIScheme
+from fsi_coupling import FSIScheme, FSIGTVFScheme
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
 
@@ -401,7 +401,21 @@ class ElasticGate(Application):
                          mach_no_structure=0.,
                          gy=0.)
 
-        s = SchemeChooser(default='etvf', etvf=etvf)
+        gtvf = FSIGTVFScheme(fluids=['fluid'],
+                             solids=['tank'],
+                             structures=['gate'],
+                             structure_solids=['gate_support'],
+                             dim=2,
+                             h_fluid=0.,
+                             rho0_fluid=0.,
+                             pb_fluid=0.,
+                             c0_fluid=0.,
+                             nu_fluid=0.,
+                             mach_no_fluid=0.,
+                             mach_no_structure=0.,
+                             gy=0.)
+
+        s = SchemeChooser(default='etvf', etvf=etvf, gtvf=gtvf)
         return s
 
     def configure_scheme(self):
@@ -432,10 +446,14 @@ class ElasticGate(Application):
     def create_equations(self):
         eqns = self.scheme.get_equations()
 
-        print(eqns)
-        equation = eqns.groups[-1][5].equations[4]
-        equation.sources = ["tank", "fluid", "gate", "gate_support"]
-        print(equation)
+        if self.options.scheme == 'etvf':
+            equation = eqns.groups[-1][5].equations[4]
+            equation.sources = ["tank", "fluid", "gate", "gate_support"]
+
+        elif self.options.scheme == 'gtvf':
+            equation = eqns.groups[-1][4].equations[3]
+            # print(equation)
+            equation.sources = ["tank", "fluid", "gate", "gate_support"]
 
         return eqns
 
