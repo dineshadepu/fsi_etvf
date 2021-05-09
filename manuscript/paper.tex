@@ -431,6 +431,53 @@ results with a reasonable accuracy.
 
 
 
+\subsection{Dynamics response of an elastic plate}
+\label{sec:elastic-plate}
+
+In this example we validate the ETVF scheme in modeling an elastic structure.
+This example is taken from \cite{Sun2019study}, who took it from Turek and
+Hron, who simulated it using FEM.
+
+An elastic plate is attached to a rigid cylinder. The material properties of
+the elastic plate are as follows, the Young's modulus is $1.4\times10^6Pa$ and
+a Poisson ratio of $0.4$ and the density is $1000 kg/m^3$. This plate is held
+free in a gravity field whose value is $2m/s^2$.
+
+
+Here we simulate a high speed elastic aluminum wedge impacting on undisturbed
+water surface. This benchmark was dealt in
+{A $\delta$ SPH-SPIM coupled method for fluid-structure interaction problems} and
+{abbas khayyer} papers.
+This is an attractive benchmark as it has an semi-analytical solution.
+
+A fluid of length 6 m and a height of 2.2 m is settled inside a tank of length
+6m and height 4m which gives rise to a pressure distribution of a hydrostatic
+tank. Into this hydrostatic tank a wedge of length 0.6m and a thickness of
+0.04m is been dropped with a velocity of 30 m/s. The wedge angle is 10
+degrees. Please see figure \ref{fig:half-wedge-deformable} for visual clarity.
+
+The initial particle spacing is set as 0.005m and the total number of
+particles combining the wedge, tank and fluid is TOBEDONE. The density of the
+fluid is taken as 1000 $kg/m^3$. The material properties of the wedge are as
+follows: density of 2700 $Kg/m^3$, Young's modulus of 6.75 1e10 $N/m^2$ and a
+Poisson ratio of 0.34. An artificial viscosity $alpha$ of 0.1 is used for
+fluids and 1 for solid phase.
+
+In figure \ref{wedge-entering-the-tank}, at different time stamps, we plot the
+pressure fields of water and sigma 00 if the flexible wedge. (We need to give
+some physical insight of what is expected and what is been observed, provided
+our simulations are correct)
+
+
+
+A total of three points are marked on the wedge for a qualitative validation.
+In figure \ref{point-A-wedge-displacement}, we plot the displacement of point
+A with time, and compared with Abbhas and and the semi analytical solution of
+scolon 2004. Similarly at point B and point C we compare the pressure of the
+current scheme with the one provided with Abbas and the semi analytical
+solution. It can be seen that the current scheme is able to produce the
+results with a reasonable accuracy.
+
 
 
 

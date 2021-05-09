@@ -71,7 +71,8 @@ class SolidWallPressureBCFSI(Equation):
             (self.gy - d_av[d_idx])*XIJ[1] + \
             (self.gz - d_aw[d_idx])*XIJ[2]
 
-        d_p_fsi[d_idx] += s_p[s_idx] * WIJ + s_rho[s_idx] * gdotxij * WIJ
+        max_val = max(0., gdotxij)
+        d_p_fsi[d_idx] += s_p[s_idx] * WIJ + s_rho[s_idx] * max_val * WIJ
 
     def post_loop(self, d_idx, d_wij, d_p_fsi):
         # extrapolated pressure at the ghost particle
@@ -1595,6 +1596,8 @@ class FSIGTVFScheme(Scheme):
             pa.add_output_arrays(['normal'])
             pa.add_property('normal_tmp', stride=3)
 
+            pa.add_output_arrays(['p_fsi'])
+
             name = pa.name
 
             props = ['m', 'rho', 'h']
@@ -1634,8 +1637,9 @@ class FSIGTVFScheme(Scheme):
 
             # for normals
             pa.add_property('normal', stride=3)
-            pa.add_output_arrays(['normal'])
+            # pa.add_output_arrays(['normal'])
             pa.add_property('normal_tmp', stride=3)
+            pa.add_output_arrays(['p_fsi'])
 
             name = pa.name
 

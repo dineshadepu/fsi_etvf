@@ -1890,7 +1890,9 @@ class SolidsScheme(Scheme):
             else:
                 g3.append(
                     AdamiBoundaryConditionExtrapolateNoSlip(
-                        dest=boundary, sources=self.solids))
+                        dest=boundary, sources=self.solids,
+                        gx=self.gx, gy=self.gy, gz=self.gz
+                    ))
         if len(g3) > 0:
             stage2.append(Group(g3))
 
