@@ -20,6 +20,8 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.tools.geometry import get_2d_block, rotate
 
 from fsi_coupling import FSIScheme, FSIGTVFScheme
+from fsi_coupling_wcsph import FSIWCSPHScheme
+
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
 
@@ -185,6 +187,8 @@ class ElasticGate(Application):
         self.vref_fluid = np.sqrt(2 * 9.81 * self.fluid_height)
         self.u_max_fluid = self.vref_fluid
         self.c0_fluid = 10 * self.vref_fluid
+        print("co is")
+        print(self.c0_fluid)
         self.mach_no_fluid = self.vref_fluid / self.c0_fluid
         self.p0_fluid = self.fluid_density * self.c0_fluid**2.
         self.alpha = 0.1
@@ -371,6 +375,9 @@ class ElasticGate(Application):
             y_translate = (max(gate.y) - min(gate_support.y))
             gate_support.y += y_translate + self.fluid_spacing
 
+        # gate.x[:] += 3. * self.fluid_spacing
+        # gate_support.x[:] += 3. * self.fluid_spacing
+
         # ================================
         # Adjust the geometry ends
         # ================================
@@ -415,7 +422,21 @@ class ElasticGate(Application):
                              mach_no_structure=0.,
                              gy=0.)
 
-        s = SchemeChooser(default='etvf', etvf=etvf, gtvf=gtvf)
+        wcsph = FSIWCSPHScheme(fluids=['fluid'],
+                               solids=['tank'],
+                               structures=['gate'],
+                               structure_solids=['gate_support'],
+                               dim=2,
+                               h_fluid=0.,
+                               rho0_fluid=0.,
+                               pb_fluid=0.,
+                               c0_fluid=0.,
+                               nu_fluid=0.,
+                               mach_no_fluid=0.,
+                               mach_no_structure=0.,
+                               gy=0.)
+
+        s = SchemeChooser(default='etvf', etvf=etvf, gtvf=gtvf, wcsph=wcsph)
         return s
 
     def configure_scheme(self):

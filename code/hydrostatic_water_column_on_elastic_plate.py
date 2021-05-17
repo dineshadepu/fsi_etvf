@@ -20,6 +20,7 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.tools.geometry import get_2d_block, rotate
 
 from fsi_coupling import FSIScheme
+from fsi_coupling_wcsph import FSIWCSPHScheme
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
 
@@ -342,7 +343,22 @@ class ElasticGate(Application):
                          mach_no_structure=0.,
                          gy=0.)
 
-        s = SchemeChooser(default='etvf', etvf=etvf)
+        wcsph = FSIWCSPHScheme(fluids=['fluid'],
+                               solids=['tank'],
+                               structures=['gate'],
+                               structure_solids=['gate_support'],
+                               dim=2,
+                               h_fluid=0.,
+                               rho0_fluid=0.,
+                               pb_fluid=0.,
+                               c0_fluid=0.,
+                               nu_fluid=0.,
+                               mach_no_fluid=0.,
+                               mach_no_structure=0.,
+                               gy=0.)
+
+        s = SchemeChooser(default='etvf', etvf=etvf, wcsph=wcsph)
+
         return s
 
     def configure_scheme(self):
@@ -373,8 +389,9 @@ class ElasticGate(Application):
     def create_equations(self):
         eqns = self.scheme.get_equations()
 
-        equation = eqns.groups[-1][5].equations[4]
-        equation.sources = ["tank", "fluid", "gate", "gate_support"]
+        if self.options.scheme == 'etvf':
+            equation = eqns.groups[-1][5].equations[4]
+            equation.sources = ["tank", "fluid", "gate", "gate_support"]
         # print(equation)
 
         return eqns
