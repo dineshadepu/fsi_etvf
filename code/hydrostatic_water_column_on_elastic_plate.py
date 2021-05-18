@@ -423,12 +423,10 @@ class ElasticGate(Application):
             a_eval.evaluate(t, dt)
 
     def post_process(self, fname):
-        if len(self.output_files) == 0:
-            return
-
         from pysph.solver.utils import iter_output, load
+        from pysph.solver.utils import get_files
 
-        files = self.output_files
+        files = get_files(fname)
 
         data = load(files[0])
         # solver_data = data['solver_data']
@@ -437,7 +435,7 @@ class ElasticGate(Application):
         y_0 = pa.y[61]
 
         files = files[0::10]
-        print(len(files))
+        # print(len(files))
         t, amplitude = [], []
         for sd, gate in iter_output(files, 'gate'):
             _t = sd['t']
@@ -464,7 +462,7 @@ class ElasticGate(Application):
         plt.xlabel('t')
         plt.ylabel('amplitude')
         plt.legend()
-        fig = os.path.join(self.output_dir, "amplitude_with_t.png")
+        fig = os.path.join(os.path.dirname(fname), "amplitude_with_t.png")
         plt.savefig(fig, dpi=300)
 
 

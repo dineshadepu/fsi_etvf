@@ -395,108 +395,108 @@ class FSIScheme(Scheme):
         # =========================#
         # fluid equations
         # =========================#
-        eqs = []
-        if len(self.solids) > 0:
-            for solid in self.solids:
-                eqs.append(
-                    SetWallVelocityFreeSlipAndNoSlip(dest=solid,
-                                                     sources=self.fluids), )
+        # eqs = []
+        # if len(self.solids) > 0:
+        #     for solid in self.solids:
+        #         eqs.append(
+        #             SetWallVelocityFreeSlipAndNoSlip(dest=solid,
+        #                                              sources=self.fluids), )
 
-            stage1.append(Group(equations=eqs, real=False))
+        #     stage1.append(Group(equations=eqs, real=False))
 
-        if len(self.solids) > 0:
-            eqs = []
-            for solid in self.solids:
-                eqs.append(
-                    SetWallVelocityUhatFreeSlipAndNoSlip(
-                        dest=solid, sources=self.fluids))
+        # if len(self.solids) > 0:
+        #     eqs = []
+        #     for solid in self.solids:
+        #         eqs.append(
+        #             SetWallVelocityUhatFreeSlipAndNoSlip(
+        #                 dest=solid, sources=self.fluids))
 
-            stage1.append(Group(equations=eqs, real=False))
+        #     stage1.append(Group(equations=eqs, real=False))
 
-        # for the elastic structure
-        eqs = []
-        if len(self.structures) > 0:
-            for structure in self.structures:
-                eqs.append(
-                    SetWallVelocityFreeSlipAndNoSlip(dest=structure,
-                                                     sources=self.fluids), )
+        # # for the elastic structure
+        # eqs = []
+        # if len(self.structures) > 0:
+        #     for structure in self.structures:
+        #         eqs.append(
+        #             SetWallVelocityFreeSlipAndNoSlip(dest=structure,
+        #                                              sources=self.fluids), )
 
-            stage1.append(Group(equations=eqs, real=False))
+        #     stage1.append(Group(equations=eqs, real=False))
 
-        if len(self.structures) > 0:
-            eqs = []
-            for structure in self.structures:
-                eqs.append(
-                    SetWallVelocityUhatFreeSlipAndNoSlip(
-                        dest=structure, sources=self.fluids))
+        # if len(self.structures) > 0:
+        #     eqs = []
+        #     for structure in self.structures:
+        #         eqs.append(
+        #             SetWallVelocityUhatFreeSlipAndNoSlip(
+        #                 dest=structure, sources=self.fluids))
 
-            stage1.append(Group(equations=eqs, real=False))
-        # for the elastic structure ends
+        #     stage1.append(Group(equations=eqs, real=False))
+        # # for the elastic structure ends
 
-        # for the elastic structure solid support
-        eqs = []
-        if len(self.structure_solids) > 0:
-            for solid in self.structure_solids:
-                eqs.append(
-                    SetWallVelocityFreeSlipAndNoSlip(dest=solid,
-                                                     sources=self.fluids), )
+        # # for the elastic structure solid support
+        # eqs = []
+        # if len(self.structure_solids) > 0:
+        #     for solid in self.structure_solids:
+        #         eqs.append(
+        #             SetWallVelocityFreeSlipAndNoSlip(dest=solid,
+        #                                              sources=self.fluids), )
 
-            stage1.append(Group(equations=eqs, real=False))
+        #     stage1.append(Group(equations=eqs, real=False))
 
-        if len(self.structure_solids) > 0:
-            eqs = []
-            for solid in self.structure_solids:
-                eqs.append(
-                    SetWallVelocityUhatFreeSlipAndNoSlip(
-                        dest=solid, sources=self.fluids))
+        # if len(self.structure_solids) > 0:
+        #     eqs = []
+        #     for solid in self.structure_solids:
+        #         eqs.append(
+        #             SetWallVelocityUhatFreeSlipAndNoSlip(
+        #                 dest=solid, sources=self.fluids))
 
-            stage1.append(Group(equations=eqs, real=False))
-        # for the elastic structure solid support ends
+        #     stage1.append(Group(equations=eqs, real=False))
+        # # for the elastic structure solid support ends
 
         eqs = []
         for fluid in self.fluids:
             eqs.append(ContinuityEquationGTVF(dest=fluid,
-                                              sources=self.fluids), )
+                                              sources=self.fluids+self.solids+self.structures+self.structure_solids), )
             eqs.append(
                 ContinuityEquationETVFCorrection(dest=fluid,
-                                                 sources=self.fluids), )
+                                                 sources=self.fluids+self.solids+self.structures+self.structure_solids), )
             # if self.edac is True:
             #     eqs.append(
             #         EDACEquation(dest=fluid, sources=self.fluids,
             #                      nu=nu_edac), )
 
-        if len(self.solids) > 0:
-            for fluid in self.fluids:
-                eqs.append(
-                    ContinuitySolidEquationGTVF(dest=fluid,
-                                                sources=self.solids), )
-                eqs.append(
-                    ContinuitySolidEquationETVFCorrection(
-                        dest=fluid, sources=self.solids), )
+        # if len(self.solids) > 0:
+        #     for fluid in self.fluids:
+        #         eqs.append(
+        #             ContinuitySolidEquationGTVF(dest=fluid,
+        #                                         sources=self.solids), )
+        #         eqs.append(
+        #             ContinuitySolidEquationETVFCorrection(
+        #                 dest=fluid, sources=self.solids), )
 
-            # if self.edac is True:
-            #     eqs.append(
-            #         EDACSolidEquation(dest=fluid, sources=self.solids,
-            #                           nu=nu_edac), )
+        #     # if self.edac is True:
+        #     #     eqs.append(
+        #     #         EDACSolidEquation(dest=fluid, sources=self.solids,
+        #     #                           nu=nu_edac), )
 
-        # TODO: Should we use direct density or the density of the fluid
-        if len(self.structures) > 0:
-            for fluid in self.fluids:
-                eqs.append(
-                    ContinuitySolidEquationGTVFFSI(dest=fluid,
-                                                   sources=self.structures), )
-                eqs.append(
-                    ContinuitySolidEquationETVFCorrectionFSI(
-                        dest=fluid, sources=self.structures), )
+        # # TODO: Should we use direct density or the density of the fluid
+        # if len(self.structures) > 0:
+        #     for fluid in self.fluids:
+        #         eqs.append(
+        #             ContinuitySolidEquationGTVFFSI(dest=fluid,
+        #                                            sources=self.structures), )
+        #         eqs.append(
+        #             ContinuitySolidEquationETVFCorrectionFSI(
+        #                 dest=fluid, sources=self.structures), )
 
-        if len(self.structure_solids) > 0:
-            for fluid in self.fluids:
-                eqs.append(
-                    ContinuitySolidEquationGTVFFSI(dest=fluid,
-                                                   sources=self.structure_solids))
-                eqs.append(
-                    ContinuitySolidEquationETVFCorrectionFSI(
-                        dest=fluid, sources=self.structure_solids))
+        # if len(self.structure_solids) > 0:
+        #     for fluid in self.fluids:
+        #         eqs.append(
+        #             ContinuitySolidEquationGTVFFSI(dest=fluid,
+        #                                            sources=self.structure_solids))
+        #         eqs.append(
+        #             ContinuitySolidEquationETVFCorrectionFSI(
+        #                 dest=fluid, sources=self.structure_solids))
 
         stage1.append(Group(equations=eqs, real=False))
 
@@ -683,7 +683,7 @@ class FSIScheme(Scheme):
                 g3.append(
                     AdamiBoundaryConditionExtrapolateNoSlip(
                         dest=boundary, sources=self.structures, gx=self.gx,
-                        gy=self.gy, gz=self.gz))
+                        gy=0., gz=self.gz))
             stage2.append(Group(g3))
 
         # -------------------
@@ -718,14 +718,14 @@ class FSIScheme(Scheme):
 
             stage2.append(Group(g4))
 
-            # Add gravity
-            g5 = []
-            for structure in self.structures:
-                g5.append(
-                    AddGravityToStructure(dest=structure, sources=None, gx=self.gx,
-                                        gy=self.gy, gz=self.gz))
+            # # Add gravity
+            # g5 = []
+            # for structure in self.structures:
+            #     g5.append(
+            #         AddGravityToStructure(dest=structure, sources=None, gx=self.gx,
+            #                             gy=self.gy, gz=self.gz))
 
-            stage2.append(Group(g5))
+            # stage2.append(Group(g5))
 
         return MultiStageEquations([stage1, stage2])
 

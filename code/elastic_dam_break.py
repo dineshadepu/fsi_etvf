@@ -461,7 +461,7 @@ class ElasticGate(Application):
             mach_no_structure=self.mach_no_gate,
             gy=self.gy,
             artificial_vis_alpha=1.,
-            alpha=0.05
+            alpha=0.1
         )
 
     def create_equations(self):
@@ -503,6 +503,32 @@ class ElasticGate(Application):
 
             # When
             a_eval.evaluate(t, dt)
+
+    def post_process(self, fname):
+        from pysph.solver.utils import iter_output
+        from pysph.solver.utils import get_files
+
+        files = get_files(fname)
+
+        t, amplitude = [], []
+        for sd, gate in iter_output(files[::10], 'gate'):
+            _t = sd['t']
+            t.append(_t)
+            amplitude.append(gate.y[479])
+
+        import os
+        from matplotlib import pyplot as plt
+
+        plt.clf()
+
+        # plt.plot(t_gtvf, amplitude_gtvf, "s-", label='GTVF Paper')
+        plt.plot(t, amplitude, "-", label='Simulated')
+
+        plt.xlabel('t')
+        plt.ylabel('amplitude')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "amplitude_with_t.png")
+        plt.savefig(fig, dpi=300)
 
 
 if __name__ == '__main__':
