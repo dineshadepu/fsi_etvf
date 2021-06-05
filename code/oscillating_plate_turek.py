@@ -354,12 +354,11 @@ class OscillatingPlate(Application):
                 a_eval.evaluate(t, dt)
 
     def post_process(self, fname):
-        if len(self.output_files) == 0:
-            return
-
         from pysph.solver.utils import iter_output
+        from pysph.solver.utils import get_files
 
-        files = self.output_files
+        files = get_files(fname)
+
         t, x_amplitude, y_amplitude = [], [], []
         for sd, array in iter_output(files, 'plate'):
             _t = sd['t']
@@ -377,15 +376,16 @@ class OscillatingPlate(Application):
         np.savez(res, t=t, x_amplitude=x_amplitude, y_amplitude=y_amplitude)
 
         # gtvf data
-        # path = os.path.abspath(__file__)
-        # directory = os.path.dirname(path)
+        path = os.path.abspath(__file__)
+        directory = os.path.dirname(path)
 
-        # data = np.loadtxt(os.path.join(directory, 'oscillating_plate.csv'), delimiter=',')
-        # t_gtvf, amplitude_gtvf = data[:, 0], data[:, 1]
+        data = np.loadtxt(os.path.join(directory, 'turek_fem_y_data.csv'),
+                          delimiter=',')
+        t_fem, amplitude_fem = data[:, 0], data[:, 1]
 
         # plt.clf()
 
-        # plt.plot(t_gtvf, amplitude_gtvf, "s-", label='GTVF Paper')
+        plt.plot(t_fem, amplitude_fem, "s-", label='FEM')
         plt.plot(t, y_amplitude, "-", label='Simulated')
 
         # print("heeee haaaa")

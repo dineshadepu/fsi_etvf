@@ -51,7 +51,9 @@ class SolidWallPressureBCFSI(Equation):
     velocity formulation).
 
     """
-    def __init__(self, dest, sources, gx=0.0, gy=0.0, gz=0.0):
+    def __init__(self, dest, sources, rho_0, p_0, gx=0.0, gy=0.0, gz=0.0):
+        self.rho_0 = rho_0
+        self.p_0 = p_0
         self.gx = gx
         self.gy = gy
         self.gz = gz
@@ -74,15 +76,17 @@ class SolidWallPressureBCFSI(Equation):
         max_val = max(0., gdotxij)
         d_p_fsi[d_idx] += s_p[s_idx] * WIJ + s_rho[s_idx] * max_val * WIJ
 
-    def post_loop(self, d_idx, d_wij, d_p_fsi):
+    def post_loop(self, d_idx, d_wij, d_p_fsi, d_rho_fsi):
         # extrapolated pressure at the ghost particle
         if d_wij[d_idx] > 1e-14:
             d_p_fsi[d_idx] /= d_wij[d_idx]
 
+        d_rho_fsi[d_idx] = self.rho_0 * (d_p_fsi[d_idx] / self.p_0 + 1.)
+
 
 class AccelerationOnFluidDueToStructure(Equation):
-    def loop(self, d_rho, s_rho_fsi, d_idx, s_idx, d_p, s_p_fsi, s_m_fsi, d_au,
-             d_av, d_aw, DWIJ):
+    def loop(self, d_rho, s_rho_fsi, d_idx, s_idx, d_p, s_p_fsi, s_m, s_m_fsi,
+             d_au, d_av, d_aw, DWIJ):
         rhoi2 = d_rho[d_idx] * d_rho[d_idx]
         rhoj2 = s_rho_fsi[s_idx] * s_rho_fsi[s_idx]
 
@@ -135,21 +139,20 @@ class ContinuitySolidEquationETVFCorrectionFSI(Equation):
     This is the additional term arriving in the new ETVF continuity equation
     """
     def loop(self, d_idx, d_arho, d_rho, d_u, d_v, d_w, d_uhat, d_vhat, d_what,
-             s_idx, s_rho_fsi, s_m_fsi, s_ugfs, s_vgfs, s_wgfs, s_ughatfs,
-             s_vghatfs, s_wghatfs, s_ugns, s_vgns, s_wgns, s_ughatns,
-             s_vghatns, s_wghatns, DWIJ):
+             s_idx, s_rho_fsi, s_m_fsi, s_u, s_v, s_w, s_uhat, s_vhat,
+             s_what, DWIJ):
         # by using free ship boundary conditions
         tmp0 = s_rho_fsi[s_idx] * (
-            s_ughatfs[s_idx] - s_ugfs[s_idx]) - d_rho[d_idx] * (d_uhat[d_idx] -
-                                                                d_u[d_idx])
+            s_uhat[s_idx] - s_u[s_idx]) - d_rho[d_idx] * (d_uhat[d_idx] -
+                                                          d_u[d_idx])
 
         tmp1 = s_rho_fsi[s_idx] * (
-            s_vghatfs[s_idx] - s_vgfs[s_idx]) - d_rho[d_idx] * (d_vhat[d_idx] -
-                                                                d_v[d_idx])
+            s_vhat[s_idx] - s_v[s_idx]) - d_rho[d_idx] * (d_vhat[d_idx] -
+                                                          d_v[d_idx])
 
         tmp2 = s_rho_fsi[s_idx] * (
-            s_wghatfs[s_idx] - s_wgfs[s_idx]) - d_rho[d_idx] * (d_what[d_idx] -
-                                                                d_w[d_idx])
+            s_what[s_idx] - s_w[s_idx]) - d_rho[d_idx] * (d_what[d_idx] -
+                                                          d_w[d_idx])
 
         # # by using no ship boundary conditions
         # tmp0 = s_rho[s_idx] * (s_ughatns[s_idx] - s_ugns[s_idx]
@@ -214,6 +217,7 @@ class FSIScheme(Scheme):
         self.internal_flow = internal_flow
         self.edac = edac
         self.summation = summation
+        self.structure_gravity = False
 
         # TODO: kernel_fac will change with kernel. This should change
         self.kernel_choice = kernel_choice
@@ -290,11 +294,15 @@ class FSIScheme(Scheme):
                            7. Gaussian
                            8. Gaussian""" % choices)
 
+        add_bool_argument(
+            group, 'structure-gravity', dest='structure_gravity',
+            default=False, help='Apply gravity to structure')
+
     def consume_user_options(self, options):
         vars = [
             'alpha', 'edac_alpha', 'pst', 'debug', 'ipst_max_iterations',
             'integrator', 'internal_flow', 'ipst_tolerance', 'ipst_interval',
-            'edac', 'summation', 'kernel_choice'
+            'edac', 'summation', 'kernel_choice', 'structure_gravity'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
@@ -459,7 +467,7 @@ class FSIScheme(Scheme):
                                               sources=self.fluids+self.solids+self.structures+self.structure_solids), )
             eqs.append(
                 ContinuityEquationETVFCorrection(dest=fluid,
-                                                 sources=self.fluids+self.solids+self.structures+self.structure_solids), )
+                                                 sources=self.fluids+self.solids), )
             # if self.edac is True:
             #     eqs.append(
             #         EDACEquation(dest=fluid, sources=self.fluids,
@@ -479,24 +487,24 @@ class FSIScheme(Scheme):
         #     #         EDACSolidEquation(dest=fluid, sources=self.solids,
         #     #                           nu=nu_edac), )
 
-        # # TODO: Should we use direct density or the density of the fluid
-        # if len(self.structures) > 0:
-        #     for fluid in self.fluids:
-        #         eqs.append(
-        #             ContinuitySolidEquationGTVFFSI(dest=fluid,
-        #                                            sources=self.structures), )
-        #         eqs.append(
-        #             ContinuitySolidEquationETVFCorrectionFSI(
-        #                 dest=fluid, sources=self.structures), )
+        # TODO: Should we use direct density or the density of the fluid
+        if len(self.structures) > 0:
+            for fluid in self.fluids:
+                # eqs.append(
+                #     ContinuitySolidEquationGTVFFSI(dest=fluid,
+                #                                    sources=self.structures), )
+                eqs.append(
+                    ContinuitySolidEquationETVFCorrectionFSI(
+                        dest=fluid, sources=self.structures), )
 
-        # if len(self.structure_solids) > 0:
-        #     for fluid in self.fluids:
-        #         eqs.append(
-        #             ContinuitySolidEquationGTVFFSI(dest=fluid,
-        #                                            sources=self.structure_solids))
-        #         eqs.append(
-        #             ContinuitySolidEquationETVFCorrectionFSI(
-        #                 dest=fluid, sources=self.structure_solids))
+        if len(self.structure_solids) > 0:
+            for fluid in self.fluids:
+                # eqs.append(
+                #     ContinuitySolidEquationGTVFFSI(dest=fluid,
+                #                                    sources=self.structure_solids))
+                eqs.append(
+                    ContinuitySolidEquationETVFCorrectionFSI(
+                        dest=fluid, sources=self.structure_solids))
 
         stage1.append(Group(equations=eqs, real=False))
 
@@ -580,6 +588,8 @@ class FSIScheme(Scheme):
 
                 eqs.append(
                     SolidWallPressureBCFSI(dest=structure, sources=self.fluids,
+                                           p_0=self.pb_fluid,
+                                           rho_0=self.rho0_fluid,
                                            gx=self.gx, gy=self.gy, gz=self.gz))
 
             stage2.append(Group(equations=eqs, real=False))
@@ -593,6 +603,8 @@ class FSIScheme(Scheme):
 
                 eqs.append(
                     SolidWallPressureBCFSI(dest=structure_solid,
+                                           p_0=self.pb_fluid,
+                                           rho_0=self.rho0_fluid,
                                            sources=self.fluids, gx=self.gx,
                                            gy=self.gy, gz=self.gz))
             stage2.append(Group(equations=eqs, real=False))
@@ -614,7 +626,7 @@ class FSIScheme(Scheme):
                 eqs.append(
                     MomentumEquationArtificialViscosity(
                         dest=fluid,
-                        sources=self.fluids+self.solids+self.structures+self.structure_solids,
+                        sources=self.fluids,
                         c0=self.c0_fluid,
                         alpha=self.alpha
                     )
@@ -625,16 +637,17 @@ class FSIScheme(Scheme):
                     dest=fluid, sources=self.fluids + self.solids, gx=self.gx,
                     gy=self.gy, gz=self.gz), )
 
-            eqs.append(
-                MomentumEquationArtificialStress(dest=fluid,
-                                                 sources=self.fluids,
-                                                 dim=self.dim))
-            eqs.append(
-                MomentumEquationTVFDivergence(dest=fluid, sources=self.fluids))
+            # eqs.append(
+            #     MomentumEquationArtificialStress(dest=fluid,
+            #                                      sources=self.fluids,
+            #                                      dim=self.dim))
+            # eqs.append(
+            #     MomentumEquationTVFDivergence(dest=fluid, sources=self.fluids))
 
             eqs.append(
                 ComputeAuHatETVFSun2019(dest=fluid,
-                                        sources=self.fluids + self.solids,
+                                        sources=self.fluids + self.solids + self.structures
+                                        + self.structure_solids,
                                         mach_no=self.mach_no_fluid))
             if self.nu_fluid > 0:
                 eqs.append(
@@ -683,7 +696,7 @@ class FSIScheme(Scheme):
                 g3.append(
                     AdamiBoundaryConditionExtrapolateNoSlip(
                         dest=boundary, sources=self.structures, gx=self.gx,
-                        gy=0., gz=self.gz))
+                        gy=self.gy, gz=self.gz))
             stage2.append(Group(g3))
 
         # -------------------
@@ -718,14 +731,16 @@ class FSIScheme(Scheme):
 
             stage2.append(Group(g4))
 
-            # # Add gravity
-            # g5 = []
-            # for structure in self.structures:
-            #     g5.append(
-            #         AddGravityToStructure(dest=structure, sources=None, gx=self.gx,
-            #                             gy=self.gy, gz=self.gz))
+            # Add gravity
+            if self.structure_gravity is True:
+                g5 = []
+                for structure in self.structures:
+                    g5.append(
+                        AddGravityToStructure(dest=structure, sources=None,
+                                              gx=self.gx, gy=self.gy,
+                                              gz=self.gz))
 
-            # stage2.append(Group(g5))
+                stage2.append(Group(g5))
 
         return MultiStageEquations([stage1, stage2])
 
@@ -1360,6 +1375,8 @@ class FSIGTVFScheme(Scheme):
 
                 eqs.append(
                     SolidWallPressureBCFSI(dest=structure, sources=self.fluids,
+                                           p_0=self.pb_fluid,
+                                           rho_0=self.rho0_fluid,
                                            gx=self.gx, gy=self.gy, gz=self.gz))
 
             stage2.append(Group(equations=eqs, real=False))
@@ -1373,6 +1390,8 @@ class FSIGTVFScheme(Scheme):
 
                 eqs.append(
                     SolidWallPressureBCFSI(dest=structure_solid,
+                                           p_0=self.pb_fluid,
+                                           rho_0=self.rho0_fluid,
                                            sources=self.fluids, gx=self.gx,
                                            gy=self.gy, gz=self.gz))
             stage2.append(Group(equations=eqs, real=False))

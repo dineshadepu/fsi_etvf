@@ -6,6 +6,7 @@ from itertools import product
 import json
 from automan.api import PySPHProblem as Problem
 from automan.api import Automator, Simulation, filter_by_name
+from automan.jobs import free_cores
 
 import numpy as np
 import matplotlib
@@ -14,8 +15,11 @@ from pysph.solver.utils import load, get_files
 matplotlib.use('pdf')
 
 matplotlib.use('pdf')
-n_core = 2
-n_thread = 2
+# n_core = free_cores()
+# n_thread = 2 * free_cores()
+
+n_core = 4
+n_thread = 8
 backend = ' --openmp '
 
 
@@ -238,6 +242,35 @@ class OscillatingPlateTurek(Problem):
                 tf=5.,
                 ), 'GRAY N 25 Alpha 2'),
 
+            'etvf_N_50_alpha_2_not_clamped': (dict(
+                pst='sun2019',
+                no_uhat_velgrad=None,
+                no_shear_stress_tvf_correction=None,
+                no_edac=None,
+                no_surf_p_zero=None,
+                uhat_cont=None,
+                continuity_tvf_correction=None,
+                artificial_vis_alpha=2.0,
+                N=50,
+                no_clamp=None,
+                pfreq=1000,
+                tf=5.,
+                ), 'ETVF N 50 Alpha 2'),
+
+            'etvf_N_100_alpha_2_not_clamped': (dict(
+                pst='sun2019',
+                no_uhat_velgrad=None,
+                no_shear_stress_tvf_correction=None,
+                no_edac=None,
+                no_surf_p_zero=None,
+                uhat_cont=None,
+                continuity_tvf_correction=None,
+                artificial_vis_alpha=2.0,
+                N=100,
+                no_clamp=None,
+                pfreq=1000,
+                tf=5.,
+                ), 'ETVF N 50 Alpha 2'),
             # 'etvf_N_50': (dict(
             #     pst='sun2019',
             #     no_uhat_velgrad=None,
@@ -306,12 +339,47 @@ class ElasticDamBreak2D(Problem):
         self.make_output_dir()
 
 
+class FSIBM1(Problem):
+    def get_name(self):
+        return 'fsi_bm_1'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/fsi_bm_1.py' + backend
+
+        # length = [1., 2., 3., 4.]
+        # height = [0.1]
+        # pfreq = 500
+
+        # Base case info
+        self.case_info = {
+            'etvf_gate_rho_500_with_gravity': (dict(
+                scheme='etvf',
+                pst='sun2019',
+                gate_rho=500,
+                structure_gravity=None,
+                pfreq=300), 'ETVF'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use('pdf')
 
     PROBLEMS = [
-        ElasticDamBreak2D, OscillatingPlateTurek
+        ElasticDamBreak2D, OscillatingPlateTurek, FSIBM1
 
     ]
 

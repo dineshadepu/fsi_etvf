@@ -6,7 +6,7 @@ from pysph.tools.geometry import get_2d_block, get_2d_tank, get_3d_block
 def hydrostatic_tank_2d(fluid_length, fluid_height, tank_height, tank_layers,
                         fluid_spacing, tank_spacing):
     xt, yt = get_2d_tank(dx=tank_spacing,
-                         length=fluid_length + 2. * tank_spacing,
+                         length=fluid_length + tank_spacing,
                          height=tank_height,
                          num_layers=tank_layers)
     xf, yf = get_2d_block(dx=fluid_spacing,
