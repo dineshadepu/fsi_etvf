@@ -174,9 +174,8 @@ class ElasticGate(Application):
         # for boundary particles
         self.seval = None
         self.boundary_equations_1 = get_boundary_identification_etvf_equations(
-            destinations=["fluid"], sources=["fluid", "tank", "gate",
-                                             "gate_support"],
-            boundaries=["tank", "gate", "gate_support"])
+            destinations=["fluid"], sources=["fluid", "tank", "gate"],
+            boundaries=["tank", "gate"])
         # print(self.boundary_equations)
 
         # ================================================
@@ -214,8 +213,7 @@ class ElasticGate(Application):
         # self.boundary_equations = get_boundary_identification_etvf_equations(
         #     destinations=["gate"], sources=["gate"])
         self.boundary_equations_2 = get_boundary_identification_etvf_equations(
-            destinations=["gate"], sources=["gate", "gate_support"],
-            boundaries=["gate_support"])
+            destinations=["gate"], sources=["gate"])
 
         self.boundary_equations = self.boundary_equations_1 + self.boundary_equations_2
 
@@ -291,30 +289,29 @@ class ElasticGate(Application):
                 'rho_ref': self.gate_rho0
             })
 
-        # ===================================
-        # Create elastic gate support
-        # ===================================
-        gate_support = get_particle_array(
-            x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate_support",
-            constants={
-                'E': self.gate_E,
-                'n': 4.,
-                'nu': self.gate_nu,
-                'spacing0': self.gate_spacing,
-                'rho_ref': self.gate_rho0
-            })
+        # # ===================================
+        # # Create elastic gate support
+        # # ===================================
+        # gate_support = get_particle_array(
+        #     x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate_support",
+        #     constants={
+        #         'E': self.gate_E,
+        #         'n': 4.,
+        #         'nu': self.gate_nu,
+        #         'spacing0': self.gate_spacing,
+        #         'rho_ref': self.gate_rho0
+        #     })
 
-        self.scheme.setup_properties([fluid, tank,
-                                      gate, gate_support])
+        self.scheme.setup_properties([fluid, tank, gate])
 
         gate.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
         gate.rho_fsi[:] = self.fluid_density
 
-        gate_support.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
-        gate_support.rho_fsi[:] = self.fluid_density
+        # gate_support.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
+        # gate_support.rho_fsi[:] = self.fluid_density
 
-        gate_support.x[:] -= max(gate_support.x) - min(gate.x) + self.fluid_spacing
-        gate_support.y[:] += max(gate.y) - min(gate_support.y) - self.gate_height - 2. * self.fluid_spacing
+        # gate_support.x[:] -= max(gate_support.x) - min(gate.x) + self.fluid_spacing
+        # gate_support.y[:] += max(gate.y) - min(gate_support.y) - self.gate_height - 2. * self.fluid_spacing
 
         # Remove the fluid particles which are intersecting the gate and
         # gate_support
@@ -334,32 +331,15 @@ class ElasticGate(Application):
 
         fluid.remove_particles(indices)
 
-        # collect the indices which are closer to the stucture
-        indices = []
-        min_xs = min(gate_support.x)
-        max_xs = max(gate_support.x)
-        min_ys = min(gate_support.y)
-        max_ys = max(gate_support.y)
-
-        xf = fluid.x
-        yf = fluid.y
-        for i in range(len(fluid.x)):
-            if xf[i] < max_xs + self.fluid_spacing / 2. and xf[i] > min_xs - self.fluid_spacing / 2.:
-                if yf[i] < max_ys + self.fluid_spacing / 2. and yf[i] > min_ys - self.fluid_spacing / 2.:
-                    indices.append(i)
-
-        fluid.remove_particles(indices)
-
         gate.x[:] += self.fluid_spacing/2.
-        gate_support.x[:] += self.fluid_spacing/2.
 
-        return [fluid, tank, gate, gate_support]
+        return [fluid, tank, gate]
 
     def create_scheme(self):
         etvf = FSIScheme(fluids=['fluid'],
                          solids=['tank'],
                          structures=['gate'],
-                         structure_solids=['gate_support'],
+                         structure_solids=None,
                          dim=2,
                          h_fluid=0.,
                          rho0_fluid=0.,
@@ -373,9 +353,9 @@ class ElasticGate(Application):
         substep = FSISubSteppingScheme(fluids=['fluid'],
                                        solids=['tank'],
                                        structures=['gate'],
-                                       structure_solids=['gate_support'],
-                                       dt_fluid=1.,
-                                       dt_solid=1.,
+                                       structure_solids=None,
+                                       dt_fluid=self.dt_fluid,
+                                       dt_solid=self.dt_solid,
                                        dim=2,
                                        h_fluid=0.,
                                        rho0_fluid=0.,
@@ -389,7 +369,7 @@ class ElasticGate(Application):
         wcsph = FSIWCSPHScheme(fluids=['fluid'],
                                solids=['tank'],
                                structures=['gate'],
-                               structure_solids=['gate_support'],
+                               structure_solids=None,
                                dim=2,
                                h_fluid=0.,
                                rho0_fluid=0.,
@@ -412,12 +392,10 @@ class ElasticGate(Application):
             (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
 
         print("DT: %s" % dt)
-        tf = 5
+        tf = 1
 
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=100)
 
-        print("dt fluid ", self.dt_fluid)
-        print("dt solid ", self.dt_solid)
         self.scheme.configure(
             dim=2,
             h_fluid=self.h_fluid,
@@ -429,12 +407,8 @@ class ElasticGate(Application):
             mach_no_structure=self.mach_no_gate,
             gy=self.gy,
             artificial_vis_alpha=1.,
-            alpha=0.1,
-            dt_fluid=self.dt_fluid,
-            dt_solid=self.dt_solid,
+            alpha=0.1
         )
-
-        self.scheme.attributes_changed()
 
     def create_equations(self):
         eqns = self.scheme.get_equations()
@@ -480,47 +454,34 @@ class ElasticGate(Application):
 
         data = load(files[0])
         # solver_data = data['solver_data']
-        index = 979
         arrays = data['arrays']
         pa = arrays['gate']
-        y_0 = pa.y[index]
+        y_0 = pa.y[61]
 
         files = files[0::10]
         # print(len(files))
-        t, y_amplitude = [], []
+        t, amplitude = [], []
         for sd, gate in iter_output(files, 'gate'):
             _t = sd['t']
             t.append(_t)
-            y_amplitude.append((gate.y[index] - y_0))
+            amplitude.append((y_0 - gate.y[61]) * 1e5)
 
-        import matplotlib
+        # matplotlib.use('Agg')
+
         import os
-        matplotlib.use('Agg')
-
         from matplotlib import pyplot as plt
 
-        if "info" in fname:
-            res = os.path.join(os.path.dirname(fname), "results.npz")
-        else:
-            res = os.path.join(fname, "results.npz")
+        # res = os.path.join(self.output_dir, "results.npz")
+        # np.savez(res, t=t, amplitude=amplitude)
 
-        path = os.path.abspath(__file__)
-        directory = os.path.dirname(path)
-
-        if self.options.gate_rho == 500:
-            data = np.loadtxt(os.path.join(directory,
-                                           'fsi_bm_1_gate_rho_500_data.csv'),
-                              delimiter=',')
-            t_sun, y_amplitude_sun = data[:, 0], data[:, 1]
-
-        np.savez(res, t=t,  y_ampiltude=y_amplitude,
-                 t_sun=t_sun,  y_amplitude_sun=y_amplitude_sun)
+        # gtvf data
+        # data = np.loadtxt('./oscillating_plate.csv', delimiter=',')
+        # t_gtvf, amplitude_gtvf = data[:, 0], data[:, 1]
 
         plt.clf()
 
         # plt.plot(t_gtvf, amplitude_gtvf, "s-", label='GTVF Paper')
-        plt.scatter(t_sun, y_amplitude_sun, label='Sun', s=3)
-        plt.plot(t, y_amplitude, "-", label='Current')
+        plt.plot(t, amplitude, "-", label='Simulated')
 
         plt.xlabel('t')
         plt.ylabel('amplitude')

@@ -372,8 +372,12 @@ class OscillatingPlate(Application):
 
         from matplotlib import pyplot as plt
 
-        res = os.path.join(self.output_dir, "results.npz")
-        np.savez(res, t=t, x_amplitude=x_amplitude, y_amplitude=y_amplitude)
+        if "info" in fname:
+            res = os.path.join(os.path.dirname(fname), "results.npz")
+        else:
+            res = os.path.join(fname, "results.npz")
+
+        # np.savez(res, t=t,  x_ampiltude=x_amplitude, y_ampiltude=y_amplitude)
 
         # gtvf data
         path = os.path.abspath(__file__)
@@ -383,17 +387,20 @@ class OscillatingPlate(Application):
                           delimiter=',')
         t_fem, amplitude_fem = data[:, 0], data[:, 1]
 
-        # plt.clf()
+        np.savez(res, t=t,  x_ampiltude=x_amplitude, y_amplitude=y_amplitude,
+                 t_fem=t_fem,  y_amplitude_fem=amplitude_fem)
 
-        plt.plot(t_fem, amplitude_fem, "s-", label='FEM')
-        plt.plot(t, y_amplitude, "-", label='Simulated')
+        plt.clf()
+
+        plt.scatter(t_fem, amplitude_fem, label='FEM')
+        plt.plot(t, y_amplitude, "-r", label='Simulated')
 
         # print("heeee haaaa")
         plt.xlabel('t')
         plt.ylabel('Amplitude')
         plt.legend()
-        fig = os.path.join(self.output_dir, "amplitude.png")
-        print(fig)
+        fig = os.path.join(os.path.dirname(fname), "amplitude.png")
+        # print(fig)
         plt.savefig(fig, dpi=300)
 
 

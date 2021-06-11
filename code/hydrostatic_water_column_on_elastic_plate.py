@@ -389,9 +389,9 @@ class ElasticGate(Application):
     def create_equations(self):
         eqns = self.scheme.get_equations()
 
-        if self.options.scheme == 'etvf':
-            equation = eqns.groups[-1][5].equations[4]
-            equation.sources = ["tank", "fluid", "gate", "gate_support"]
+        # if self.options.scheme == 'etvf':
+        #     equation = eqns.groups[-1][5].equations[4]
+        #     equation.sources = ["tank", "fluid", "gate", "gate_support"]
         # print(equation)
 
         return eqns

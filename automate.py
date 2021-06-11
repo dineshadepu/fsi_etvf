@@ -270,7 +270,7 @@ class OscillatingPlateTurek(Problem):
                 no_clamp=None,
                 pfreq=1000,
                 tf=5.,
-                ), 'ETVF N 50 Alpha 2'),
+                ), 'ETVF N 100 Alpha 2'),
             # 'etvf_N_50': (dict(
             #     pst='sun2019',
             #     no_uhat_velgrad=None,
@@ -305,6 +305,49 @@ class OscillatingPlateTurek(Problem):
 
     def run(self):
         self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        t_fem = data['etvf_N_25_alpha_2_not_clamped']['t_fem']
+        y_amplitude_fem = data['etvf_N_25_alpha_2_not_clamped']['y_amplitude_fem']
+
+        # sort the lists
+        idx  = np.argsort(t_fem)
+        list1 = np.array(t_fem)[idx]
+        list2 = np.array(y_amplitude_fem)[idx]
+
+        plt.plot(list1, list2, '--', label='FEM')
+
+        for name in self.case_info:
+            if name == 'etvf_N_25_alpha_2_not_clamped':
+                t = data[name]['t']
+                y_amplitude = data[name]['y_amplitude']
+
+                plt.plot(t, y_amplitude, label=self.case_info[name][1])
+
+            if name == 'etvf_N_50_alpha_2_not_clamped':
+                t = data[name]['t']
+                y_amplitude = data[name]['y_amplitude']
+
+                plt.plot(t, y_amplitude, label=self.case_info[name][1])
+
+            if name == 'etvf_N_100_alpha_2_not_clamped':
+                t = data[name]['t']
+                y_amplitude = data[name]['y_amplitude']
+
+                plt.plot(t, y_amplitude, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('Y - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('etvf_diff_resolutions_y_amplitude.pdf'))
+        plt.clf()
+        plt.close()
 
 
 class ElasticDamBreak2D(Problem):
