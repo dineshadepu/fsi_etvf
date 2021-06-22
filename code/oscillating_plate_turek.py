@@ -130,7 +130,6 @@ class OscillatingPlate(Application):
         # for pre step
         self.seval = None
 
-
         # boundary equations
         # self.boundary_equations = get_boundary_identification_etvf_equations(
             # destinations=["plate"], sources=["plate"])
@@ -171,12 +170,12 @@ class OscillatingPlate(Application):
         add_bool_argument(group, 'clamp', dest='clamp',
                           default=True, help='Clamped beam')
 
-        group.add_argument("--clamped",
+        group.add_argument("--clamp-factor",
                            action="store",
-                           type=int,
-                           dest="N",
-                           default=25,
-                           help="No of particles in the height direction")
+                           type=float,
+                           dest="clamp_factor",
+                           default=2.5,
+                           help="Amount of beam to be clamped")
 
     def consume_user_options(self):
         self.rho = self.options.rho
@@ -221,10 +220,11 @@ class OscillatingPlate(Application):
         self.edac_nu = self.edac_alpha * self.c0 * self.h / 8
 
         self.clamp = self.options.clamp
+        self.clamp_factor = self.options.clamp_factor
 
     def create_particles(self):
         if self.clamp is True:
-            xp, yp, xw, yw = get_fixed_beam(self.L, self.H, self.L/2.5,
+            xp, yp, xw, yw = get_fixed_beam(self.L, self.H, self.L/self.clamp_factor,
                                             self.wall_layers, self.dx_plate)
             # make sure that the beam intersection with wall starts at the 0.
             min_xp = np.min(xp)
