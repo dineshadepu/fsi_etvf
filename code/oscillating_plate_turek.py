@@ -286,6 +286,9 @@ class OscillatingPlate(Application):
         if self.clamp is True:
             if self.N == 25:
                 plate.amplitude_idx[0] = 2700
+                if self.clamp_factor == 8:
+                    print("here")
+                    plate.amplitude_idx[0] = 2161
 
         ##################################
         # Add output arrays

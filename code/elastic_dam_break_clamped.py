@@ -251,7 +251,7 @@ class ElasticGate(Application):
         # Create fluid
         # ===================================
         xf, yf = get_2d_block(dx=self.fluid_spacing, length=self.fluid_length,
-                              height=self.fluid_length)
+                              height=self.fluid_height)
 
         xt, yt = create_tank_2d_from_block_2d(
             xf, yf, self.tank_length, self.tank_height, self.tank_spacing,
@@ -490,29 +490,70 @@ class ElasticGate(Application):
 
     def post_process(self, fname):
         from pysph.solver.utils import iter_output
-        from pysph.solver.utils import get_files
+        from pysph.solver.utils import get_files, load
 
         files = get_files(fname)
 
-        t, amplitude = [], []
-        for sd, gate in iter_output(files[::10], 'gate'):
+        # initial position of the gate
+        index = 479
+        data = load(files[0])
+        arrays = data['arrays']
+        gate = arrays['gate']
+        y_initial = gate.y[index]
+        x_initial = gate.x[index]
+
+        t, y_amplitude, x_amplitude = [], [], []
+        for sd, gate in iter_output(files[::20], 'gate'):
             _t = sd['t']
             t.append(_t)
-            amplitude.append(gate.y[479])
+            y_amplitude.append(gate.y[index] - y_initial)
+            x_amplitude.append(gate.x[index] - x_initial)
 
         import os
         from matplotlib import pyplot as plt
 
-        plt.clf()
+        # gtvf data
+        path = os.path.abspath(__file__)
+        directory = os.path.dirname(path)
 
-        # plt.plot(t_gtvf, amplitude_gtvf, "s-", label='GTVF Paper')
-        plt.plot(t, amplitude, "-", label='Simulated')
+        data = np.loadtxt(os.path.join(directory, 'elastic_dam_break_vertical_displacement_simulated.csv'),
+                          delimiter=',')
+        t_wcsph, amplitude_wcsph = data[:, 0], data[:, 1]
+
+        data = np.loadtxt(os.path.join(directory, 'elastic_dam_break_vertical_displacement_experimental.csv'),
+                          delimiter=',')
+        t_exp, amplitude_exp = data[:, 0], data[:, 1]
+
+        plt.clf()
+        plt.plot(t_wcsph, amplitude_wcsph, "s-", label='WCSPH Paper')
+        plt.plot(t_exp, amplitude_exp, "s-", label='Experiment')
+        plt.plot(t, y_amplitude, "-", label='CTVF')
 
         plt.xlabel('t')
         plt.ylabel('amplitude')
         plt.legend()
-        fig = os.path.join(os.path.dirname(fname), "amplitude_with_t.png")
+        fig = os.path.join(os.path.dirname(fname), "y_amplitude_with_t.png")
         plt.savefig(fig, dpi=300)
+
+        # x amplitude
+        data = np.loadtxt(os.path.join(directory, 'elastic_dam_break_horizontal_displacement_simulated.csv'),
+                          delimiter=',')
+        t_wcsph, amplitude_wcsph = data[:, 0], data[:, 1]
+
+        data = np.loadtxt(os.path.join(directory, 'elastic_dam_break_horizontal_displacement_experimental.csv'),
+                          delimiter=',')
+        t_exp, amplitude_exp = data[:, 0], data[:, 1]
+        plt.clf()
+        plt.plot(t_wcsph, amplitude_wcsph, "s-", label='WCSPH Paper')
+        plt.plot(t_exp, amplitude_exp, "s-", label='Experiment')
+        plt.plot(t, x_amplitude, "-", label='CTVF')
+
+        plt.xlabel('t')
+        plt.ylabel('amplitude')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "x_amplitude_with_t.png")
+        plt.savefig(fig, dpi=300)
+
 
 
 if __name__ == '__main__':
