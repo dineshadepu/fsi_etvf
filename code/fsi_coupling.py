@@ -124,6 +124,50 @@ class AccelerationOnStructureDueToFluid(Equation):
         d_aw_fluid[d_idx] += tmp * DWIJ[2]
 
 
+class ContinuityEquationGTVFFSI(Equation):
+    r"""**Evolution of density**
+
+    From [ZhangHuAdams2017], equation (12),
+
+    .. math::
+            \frac{\tilde{d} \rho_i}{dt} = \rho_i \sum_j \frac{m_j}{\rho_j}
+            \nabla W_{ij} \cdot \tilde{\boldsymbol{v}}_{ij}
+    """
+    def initialize(self, d_arho, d_idx):
+        d_arho[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, s_m, d_rho, s_rho, d_uhat, d_vhat, d_what,
+             s_uhat, s_vhat, s_what, d_arho, DWIJ, s_m_fsi, s_rho_fsi):
+        uhatij = d_uhat[d_idx] - s_uhat[s_idx]
+        vhatij = d_vhat[d_idx] - s_vhat[s_idx]
+        whatij = d_what[d_idx] - s_what[s_idx]
+
+        udotdij = DWIJ[0]*uhatij + DWIJ[1]*vhatij + DWIJ[2]*whatij
+        fac = d_rho[d_idx] * s_m_fsi[s_idx] / s_rho_fsi[s_idx]
+        d_arho[d_idx] += fac * udotdij
+
+
+class ContinuityEquationETVFCorrectionFSI(Equation):
+    """
+    This is the additional term arriving in the new ETVF continuity equation
+    """
+    def loop(self, d_idx, d_arho, d_rho, d_u, d_v, d_w, d_uhat, d_vhat, d_what,
+             s_idx, s_rho, s_m, s_u, s_v, s_w, s_uhat, s_vhat, s_what,
+             s_rho_fsi, s_m_fsi, DWIJ):
+        tmp0 = s_rho_fsi[s_idx] * (s_uhat[s_idx] - s_u[s_idx]) - d_rho[d_idx] * (
+            d_uhat[d_idx] - d_u[d_idx])
+
+        tmp1 = s_rho_fsi[s_idx] * (s_vhat[s_idx] - s_v[s_idx]) - d_rho[d_idx] * (
+            d_vhat[d_idx] - d_v[d_idx])
+
+        tmp2 = s_rho_fsi[s_idx] * (s_what[s_idx] - s_w[s_idx]) - d_rho[d_idx] * (
+            d_what[d_idx] - d_w[d_idx])
+
+        vijdotdwij = (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
+
+        d_arho[d_idx] += s_m_fsi[s_idx] / s_rho_fsi[s_idx] * vijdotdwij
+
+
 class ContinuitySolidEquationGTVFFSI(Equation):
     def initialize(self, d_arho, d_idx):
         d_arho[d_idx] = 0.0
@@ -664,6 +708,7 @@ class FSIScheme(Scheme):
         self.edac = edac
         self.summation = summation
         self.structure_gravity = False
+        self.visc_to_solids = True
 
         # TODO: kernel_fac will change with kernel. This should change
         self.kernel_choice = kernel_choice
@@ -678,7 +723,7 @@ class FSIScheme(Scheme):
 
     def add_user_options(self, group):
         group.add_argument("--alpha", action="store", type=float, dest="alpha",
-                           default=None,
+                           default=0.1,
                            help="Alpha for the artificial viscosity.")
 
         group.add_argument("--edac-alpha", action="store", type=float,
@@ -744,11 +789,15 @@ class FSIScheme(Scheme):
             group, 'structure-gravity', dest='structure_gravity',
             default=False, help='Apply gravity to structure')
 
+        add_bool_argument(group, 'visc-to-solids', dest='visc_to_solids', default=False,
+                          help='Apply artificial viscous force to solids')
+
     def consume_user_options(self, options):
         vars = [
             'alpha', 'edac_alpha', 'pst', 'debug', 'ipst_max_iterations',
             'integrator', 'internal_flow', 'ipst_tolerance', 'ipst_interval',
-            'edac', 'summation', 'kernel_choice', 'structure_gravity'
+            'edac', 'summation', 'kernel_choice', 'structure_gravity',
+            'visc_to_solids'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
@@ -910,10 +959,10 @@ class FSIScheme(Scheme):
         eqs = []
         for fluid in self.fluids:
             eqs.append(ContinuityEquationGTVF(dest=fluid,
-                                              sources=self.fluids+self.structures),)
+                                              sources=self.fluids),)
             eqs.append(
                 ContinuityEquationETVFCorrection(dest=fluid,
-                                                 sources=self.fluids+self.structures),)
+                                                 sources=self.fluids),)
             eqs.append(
                 EDACEquation(dest=fluid, sources=self.fluids, nu=nu_edac), )
 
@@ -933,6 +982,11 @@ class FSIScheme(Scheme):
         # TODO: Should we use direct density or the density of the fluid
         if len(self.structures) > 0:
             for fluid in self.fluids:
+                eqs.append(ContinuityEquationGTVFFSI(dest=fluid,
+                                                     sources=self.structures),)
+                eqs.append(
+                    ContinuityEquationETVFCorrectionFSI(dest=fluid,
+                                                        sources=self.structures),)
                 eqs.append(
                     EDACEquationFSI(dest=fluid, sources=self.structures,
                                     nu=nu_edac), )
@@ -1085,8 +1139,8 @@ class FSIScheme(Scheme):
                                            p_0=self.pb_fluid,
                                            rho_0=self.rho0_fluid,
                                            gx=self.gx, gy=self.gy, gz=self.gz))
-                # eqs.append(
-                #     ClampWallPressureFSI(dest=structure, sources=None))
+                eqs.append(
+                    ClampWallPressureFSI(dest=structure, sources=None))
 
             stage2.append(Group(equations=eqs, real=False))
 
@@ -1117,19 +1171,30 @@ class FSIScheme(Scheme):
                                              kernel_factor=self.kernel_factor))
             stage2.append(Group(eqs))
 
+        print("alpha is")
+        print(self.alpha)
         eqs = []
         for fluid in self.fluids:
             # FIXME: Change alpha to variable
             if self.alpha > 0.:
-                eqs.append(
-                    MomentumEquationArtificialViscosity(
-                        dest=fluid,
-                        sources=self.fluids,
-                        # sources=self.fluids+self.solids+self.structures+self.structure_solids,
-                        c0=self.c0_fluid,
-                        alpha=self.alpha
+                if self.visc_to_solids is True:
+                    eqs.append(
+                        MomentumEquationArtificialViscosity(
+                            dest=fluid,
+                            sources=self.fluids+self.solids+self.structures+self.structure_solids,
+                            c0=self.c0_fluid,
+                            alpha=self.alpha
+                        )
                     )
-                )
+                else:
+                    eqs.append(
+                        MomentumEquationArtificialViscosity(
+                            dest=fluid,
+                            sources=self.fluids,
+                            c0=self.c0_fluid,
+                            alpha=self.alpha
+                        )
+                    )
 
             eqs.append(
                 MomentumEquationPressureGradient(

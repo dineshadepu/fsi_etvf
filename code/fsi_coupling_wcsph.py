@@ -18,7 +18,7 @@ from pysph.base.kernels import (CubicSpline, WendlandQuintic, QuinticSpline,
 from solid_mech import (ComputeAuHatETVF, ComputeAuHatETVFSun2019,
                         SavePositionsIPSTBeforeMoving, AdjustPositionIPST,
                         CheckUniformityIPST, ComputeAuhatETVFIPST,
-                        ResetParticlePositionsIPST, EDACEquation, setup_ipst,
+                        ResetParticlePositionsIPST, setup_ipst,
                         SetHIJForInsideParticles, ContinuityEquationUhat,
                         ContinuityEquationETVFCorrection, GTVFEOS, ComputeAuHatGTVF,
                         VelocityGradient2DUhat)
@@ -44,6 +44,7 @@ from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
 
 from solid_mech_common import AddGravityToStructure
 from pysph.sph.wc.transport_velocity import (MomentumEquationArtificialViscosity)
+from fsi_coupling import (ClampWallPressure, ClampWallPressureFSI)
 
 
 class SolidWallPressureBCFSI(Equation):
@@ -98,14 +99,14 @@ class AccelerationOnFluidDueToStructure(Equation):
 
 
 class AccelerationOnStructureDueToFluid(Equation):
-    def loop(self, d_rho_fsi, s_rho, d_idx, s_idx, d_p_fsi, s_p, s_m, d_au,
-             d_av, d_aw, DWIJ):
+    def loop(self, d_m, d_m_fsi, d_rho_fsi, s_rho, d_idx, s_idx, d_p_fsi, s_p,
+             s_m, d_au, d_av, d_aw, DWIJ):
         rhoi2 = d_rho_fsi[d_idx] * d_rho_fsi[d_idx]
         rhoj2 = s_rho[s_idx] * s_rho[s_idx]
 
         pij = d_p_fsi[d_idx] / rhoi2 + s_p[s_idx] / rhoj2
 
-        tmp = -s_m[s_idx] * pij
+        tmp = -s_m[s_idx] * pij * d_m_fsi[d_idx] / d_m[d_idx]
 
         d_au[d_idx] += tmp * DWIJ[0]
         d_av[d_idx] += tmp * DWIJ[1]
@@ -166,6 +167,72 @@ class ContinuitySolidEquationETVFCorrectionFSI(Equation):
         vijdotdwij = (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
 
         d_arho[d_idx] += s_m_fsi[s_idx] / s_rho_fsi[s_idx] * vijdotdwij
+
+
+class EDACEquation(Equation):
+    def __init__(self, dest, sources, nu):
+        self.nu = nu
+
+        super(EDACEquation, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_ap):
+        d_ap[d_idx] = 0.0
+
+    def loop(self, d_idx, d_m, d_rho, d_ap, d_p, d_V, s_idx, s_m, s_rho, s_p,
+             d_c0_ref, DWIJ, VIJ, XIJ, R2IJ, EPS):
+        Vi = d_m[d_idx]/d_rho[d_idx]
+        Vj = s_m[s_idx]/s_rho[s_idx]
+        Vi2 = Vi * Vi
+        Vj2 = Vj * Vj
+        cs2 = d_c0_ref[0] * d_c0_ref[0]
+
+        etai = d_rho[d_idx]
+        etaj = s_rho[s_idx]
+        etaij = 2 * self.nu * (etai * etaj)/(etai + etaj)
+
+        # This is the same as continuity acceleration times cs^2
+        rhoi = d_rho[d_idx]
+        rhoj = s_rho[s_idx]
+        vijdotdwij = DWIJ[0]*VIJ[0] + DWIJ[1]*VIJ[1] + DWIJ[2]*VIJ[2]
+        d_ap[d_idx] += rhoi/rhoj*cs2*s_m[s_idx]*vijdotdwij
+
+        # Viscous damping of pressure.
+        xijdotdwij = DWIJ[0]*XIJ[0] + DWIJ[1]*XIJ[1] + DWIJ[2]*XIJ[2]
+        tmp = 1.0/d_m[d_idx]*(Vi2 + Vj2)*etaij*xijdotdwij/(R2IJ + EPS)
+        d_ap[d_idx] += tmp*(d_p[d_idx] - s_p[s_idx])
+
+
+class EDACEquationFSI(Equation):
+    def __init__(self, dest, sources, nu):
+        self.nu = nu
+
+        super(EDACEquationFSI, self).__init__(dest, sources)
+
+    def initialize(self, d_idx, d_ap):
+        d_ap[d_idx] = 0.0
+
+    def loop(self, d_idx, d_m, d_rho, d_ap, d_p, d_c0_ref, s_idx, s_m_fsi,
+             s_rho_fsi, s_p_fsi, DWIJ, VIJ, XIJ, R2IJ, EPS):
+        Vi = d_m[d_idx]/d_rho[d_idx]
+        Vj = s_m_fsi[s_idx]/s_rho_fsi[s_idx]
+        Vi2 = Vi * Vi
+        Vj2 = Vj * Vj
+        cs2 = d_c0_ref[0] * d_c0_ref[0]
+
+        etai = d_rho[d_idx]
+        etaj = s_rho_fsi[s_idx]
+        etaij = 2 * self.nu * (etai * etaj)/(etai + etaj)
+
+        # This is the same as continuity acceleration times cs^2
+        rhoi = d_rho[d_idx]
+        rhoj = s_rho_fsi[s_idx]
+        vijdotdwij = DWIJ[0]*VIJ[0] + DWIJ[1]*VIJ[1] + DWIJ[2]*VIJ[2]
+        d_ap[d_idx] += rhoi/rhoj*cs2*s_m_fsi[s_idx]*vijdotdwij
+
+        # Viscous damping of pressure.
+        xijdotdwij = DWIJ[0]*XIJ[0] + DWIJ[1]*XIJ[1] + DWIJ[2]*XIJ[2]
+        tmp = 1.0/d_m[d_idx]*(Vi2 + Vj2)*etaij*xijdotdwij/(R2IJ + EPS)
+        d_ap[d_idx] += tmp*(d_p[d_idx] - s_p_fsi[s_idx])
 
 
 class FSIWCSPHScheme(Scheme):
@@ -393,7 +460,10 @@ class FSIWCSPHScheme(Scheme):
 
         from solid_mech import (AdamiBoundaryConditionExtrapolateNoSlip,
                                 MomentumEquationSolids,
-                                ComputeAuHatETVFSun2019Solid)
+                                MonaghanArtificialStressCorrection)
+
+        from pysph.sph.solid_mech.basic import (IsothermalEOS,
+                                                MonaghanArtificialStress)
         nu_edac = self._get_edac_nu()
         all = self.fluids + self.solids
         stage1 = []
@@ -463,23 +533,36 @@ class FSIWCSPHScheme(Scheme):
         for fluid in self.fluids:
             eqs.append(ContinuityEquation(dest=fluid,
                                           sources=self.fluids), )
+            eqs.append(EDACEquation(dest=fluid,
+                                    sources=self.fluids, nu=nu_edac), )
 
         if len(self.solids) > 0:
             for fluid in self.fluids:
                 eqs.append(
                     ContinuityEquation(dest=fluid,
                                        sources=self.solids), )
+                eqs.append(
+                    EDACEquation(dest=fluid,
+                                 sources=self.solids, nu=nu_edac), )
+
         if len(self.structures) > 0:
             for fluid in self.fluids:
                 eqs.append(
                     ContinuityEquation(dest=fluid,
                                        sources=self.structures), )
+                eqs.append(
+                    EDACEquationFSI(dest=fluid,
+                                    sources=self.structures, nu=nu_edac), )
 
         if len(self.structure_solids) > 0:
             for fluid in self.fluids:
                 eqs.append(
                     ContinuityEquation(dest=fluid,
                                        sources=self.structure_solids))
+                eqs.append(
+                    EDACEquationFSI(dest=fluid,
+                                    sources=self.structure_solids, nu=nu_edac), )
+
         stage1.append(Group(equations=eqs, real=False))
 
         # =========================#
@@ -494,31 +577,21 @@ class FSIWCSPHScheme(Scheme):
 
         if len(self.structures) > 0.:
             for structure in self.structures:
-                g1.append(ContinuityEquationUhat(dest=structure, sources=all))
+                g1.append(ContinuityEquation(dest=structure, sources=all))
+                g1.append(VelocityGradient2D(dest=structure, sources=all))
+                # TODO: FIX ARTIFICIAL STRESS EPS
                 g1.append(
-                    ContinuityEquationETVFCorrection(dest=structure, sources=all))
-
-                if self.dim == 2:
-                    g1.append(VelocityGradient2D(dest=structure, sources=all))
-                elif self.dim == 3:
-                    g1.append(VelocityGradient3D(dest=structure, sources=all))
+                    MonaghanArtificialStress(dest=structure, sources=None,
+                                             eps=0.3))
 
             stage1.append(Group(equations=g1))
 
             g2 = []
             for structure in self.structures:
-                g2.append(HookesDeviatoricStressRate(dest=structure, sources=None))
+                g2.append(HookesDeviatoricStressRate(dest=structure,
+                                                     sources=None))
 
             stage1.append(Group(equations=g2))
-
-            # # edac pressure evolution equation
-            # if self.edac is True:
-            #     gtmp = []
-            #     for solid in self.solids:
-            #         gtmp.append(
-            #             EDACEquation(dest=solid, sources=all, nu=self.edac_nu))
-
-            #     stage1.append(Group(gtmp))
         # =========================#
         # structure equations ends
         # =========================#
@@ -528,16 +601,6 @@ class FSIWCSPHScheme(Scheme):
         # =========================#
 
         stage2 = []
-
-        # if self.edac is False:
-        tmp = []
-        for fluid in self.fluids:
-            tmp.append(
-                # TODO: THESE PRESSURE VALUES WILL BE DIFFERENT FOR DIFFERENT PHASES
-                StateEquation(dest=fluid, sources=None, p0=self.pb_fluid,
-                              rho0=self.rho0_fluid))
-
-        stage2.append(Group(equations=tmp, real=False))
 
         if len(self.solids) > 0:
             eqs = []
@@ -549,6 +612,10 @@ class FSIWCSPHScheme(Scheme):
                 eqs.append(
                     SolidWallPressureBC(dest=solid, sources=self.fluids,
                                         gx=self.gx, gy=self.gy, gz=self.gz))
+
+                eqs.append(
+                    ClampWallPressure(dest=solid, sources=None))
+
             stage2.append(Group(equations=eqs, real=False))
 
         # FSI coupling equations, set the pressure
@@ -563,6 +630,9 @@ class FSIWCSPHScheme(Scheme):
                     SolidWallPressureBCFSI(dest=structure, sources=self.fluids,
                                            gx=self.gx, gy=self.gy, gz=self.gz))
 
+                eqs.append(
+                    ClampWallPressureFSI(dest=structure, sources=None))
+
             stage2.append(Group(equations=eqs, real=False))
 
         if len(self.structure_solids) > 0:
@@ -576,6 +646,9 @@ class FSIWCSPHScheme(Scheme):
                     SolidWallPressureBCFSI(dest=structure_solid,
                                            sources=self.fluids, gx=self.gx,
                                            gy=self.gy, gz=self.gz))
+
+                eqs.append(
+                    ClampWallPressureFSI(dest=structure_solid, sources=None))
             stage2.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure
 
@@ -598,20 +671,6 @@ class FSIWCSPHScheme(Scheme):
                     dest=fluid, sources=self.fluids + self.solids, gx=self.gx,
                     gy=self.gy, gz=self.gz), )
 
-            # eqs.append(
-            #     MomentumEquationArtificialStress(dest=fluid,
-            #                                      sources=self.fluids,
-            #                                      dim=self.dim))
-
-            # if self.nu_fluid > 0:
-            #     eqs.append(
-            #         MomentumEquationViscosity(dest=fluid, sources=self.fluids,
-            #                                   nu=self.nu_fluid))
-
-            #     if len(self.solids) > 0:
-            #         eqs.append(
-            #             MomentumEquationViscosityNoSlip(
-            #                 dest=fluid, sources=self.solids, nu=self.nu_fluid))
             if len(self.structure_solids + self.structures) > 0.:
                 eqs.append(
                     AccelerationOnFluidDueToStructure(
@@ -628,13 +687,6 @@ class FSIWCSPHScheme(Scheme):
         g2 = []
         g3 = []
         g4 = []
-
-        if len(self.structures) > 0.:
-            for structure in self.structures:
-                g1.append(
-                    SetHIJForInsideParticles(dest=structure, sources=[structure],
-                                             kernel_factor=self.kernel_factor))
-            stage2.append(Group(g1))
 
         # if self.edac is False:
         if len(self.structures) > 0.:
@@ -673,10 +725,8 @@ class FSIWCSPHScheme(Scheme):
                         sources=self.structures + self.structure_solids))
 
                 g4.append(
-                    ComputeAuHatETVFSun2019Solid(
-                        dest=structure,
-                        sources=[structure] + self.structure_solids,
-                        mach_no=self.mach_no_structure))
+                    MonaghanArtificialStressCorrection(dest=structure,
+                                                       sources=[structure]))
 
                 g4.append(
                     AccelerationOnStructureDueToFluid(dest=structure,
@@ -684,14 +734,14 @@ class FSIWCSPHScheme(Scheme):
 
             stage2.append(Group(g4))
 
-            # # Add gravity
-            # g5 = []
-            # for structure in self.structures:
-            #     g5.append(
-            #         AddGravityToStructure(dest=structure, sources=None,
-            #                               gx=self.gx, gy=self.gy, gz=self.gz))
+            # Add gravity
+            g5 = []
+            for structure in self.structures:
+                g5.append(
+                    AddGravityToStructure(dest=structure, sources=None,
+                                          gx=self.gx, gy=self.gy, gz=self.gz))
 
-            # stage2.append(Group(g5))
+            stage2.append(Group(g5))
 
         return MultiStageEquations([stage1, stage2])
 
@@ -873,7 +923,10 @@ class FSIWCSPHScheme(Scheme):
             add_properties(pa, 'cs', 'v00', 'v01', 'v02', 'v10', 'v11', 'v12',
                            'v20', 'v21', 'v22', 's00', 's01', 's02', 's11',
                            's12', 's22', 'as00', 'as01', 'as02', 'as11',
-                           'as12', 'as22', 'arho', 'au', 'av', 'aw')
+                           'as12', 'as22', 'arho', 'au', 'av', 'aw',
+                           'r00', 'r12', 'r01', 'r22', 'r11', 'r02'
+
+            )
 
             # this will change
             kernel = self.kernel(dim=self.dim)

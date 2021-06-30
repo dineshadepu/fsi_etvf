@@ -227,7 +227,7 @@ class ElasticGate(Application):
 
         # attributes for Sun PST technique
         # dummy value, will be updated in consume user options
-        self.u_max_gate = 1
+        self.u_max_gate = 50
         self.mach_no_gate = self.u_max_gate / self.c0_gate
 
         # for pre step
@@ -446,7 +446,7 @@ class ElasticGate(Application):
         # dt = 0.125 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
         # TODO: This has to be changed for solid
         dt = 0.25 * self.h_fluid / (
-            (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
+            (self.gate_E / self.gate_rho0)**0.5 + (self.u_max_gate/50.))
 
         print("DT: %s" % dt)
         tf = 0.2

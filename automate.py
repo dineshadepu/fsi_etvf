@@ -15,11 +15,11 @@ from pysph.solver.utils import load, get_files
 matplotlib.use('pdf')
 
 matplotlib.use('pdf')
-# n_core = free_cores()
-# n_thread = 2 * free_cores()
+n_core = free_cores()
+n_thread = 2 * free_cores()
 
-n_core = 4
-n_thread = 8
+# n_core = 4
+# n_thread = 8
 backend = ' --openmp '
 
 
@@ -401,6 +401,12 @@ class ElasticDamBreak2D(Problem):
             'etvf': (dict(
                 scheme='etvf',
                 pfreq=300), 'ETVF'),
+
+            'wcsph': (dict(
+                scheme='wcsph',
+                tf=0.4,
+                cache_nnps=None,
+                pfreq=300), 'ETVF'),
         }
 
         self.cases = [
@@ -450,13 +456,175 @@ class FSIBM1(Problem):
         self.make_output_dir()
 
 
+class FSITest1Bar(Problem):
+    def get_name(self):
+        return 'fsi_test_1'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/fsi_test_1.py' + backend
+
+        # length = [1., 2., 3., 4.]
+        # height = [0.1]
+        # pfreq = 500
+
+        # Base case info
+        self.case_info = {
+            'etvf_gate_rho_500_gy_1_E_1e6_nu_0_35': (dict(
+                scheme='etvf',
+                pst='sun2019',
+                structure='bar',
+                gate_rho=500,
+                gate_E=1e6,
+                gate_nu=0.35,
+                alpha=0.1,
+                gy=-1.,
+                structure_gravity=None,
+                tf=70,
+                pfreq=100), 'ETVF Rho 500 gy 1 E 1e6 nu 0.35'),
+
+            'etvf_gate_rho_1000_gy_1_E_1e6_nu_0_35': (dict(
+                scheme='etvf',
+                pst='sun2019',
+                structure='bar',
+                gate_rho=1000,
+                gate_E=1e6,
+                gate_nu=0.35,
+                alpha=0.1,
+                gy=-1.,
+                structure_gravity=None,
+                tf=70,
+                pfreq=100), 'ETVF Rho 1000 gy 1 E 1e6 nu 0.35'),
+
+            'etvf_gate_rho_1500_gy_1_E_1e6_nu_0_35': (dict(
+                scheme='etvf',
+                pst='sun2019',
+                structure='bar',
+                gate_rho=1500,
+                gate_E=1e6,
+                gate_nu=0.35,
+                alpha=0.1,
+                gy=-1.,
+                structure_gravity=None,
+                tf=70,
+                pfreq=100), 'ETVF Rho 1500 gy 1 E 1e6 nu 0.35'),
+
+            # ===================
+            # Variation in gy
+            # ===================
+            'etvf_gate_rho_500_gy_10_E_1e6_nu_0_35': (dict(
+                scheme='etvf',
+                pst='sun2019',
+                structure='bar',
+                gate_rho=500,
+                gate_E=1e6,
+                gate_nu=0.35,
+                alpha=0.1,
+                gy=-10.,
+                structure_gravity=None,
+                tf=70,
+                pfreq=100), 'ETVF Rho 500 gy 10 E 1e6 nu 0.35'),
+
+            # 'etvf_gate_rho_500_gy_100_E_1e6_nu_0_35': (dict(
+            #     scheme='etvf',
+            #     pst='sun2019',
+            #     structure='bar',
+            #     gate_rho=500,
+            #     gate_E=1e6,
+            #     gate_nu=0.35,
+            #     alpha=0.1,
+            #     gy=-100.,
+            #     structure_gravity=None,
+            #     tf=70,
+            #     pfreq=100), 'ETVF Rho 500 gy 100 E 1e6 nu 0.35'),
+            # =====================
+            # Variation in gy ends
+            # =====================
+
+            # =====================
+            # Variation in E
+            # =====================
+            'etvf_gate_rho_500_gy_1_E_1e8_nu_0_35': (dict(
+                scheme='etvf',
+                pst='sun2019',
+                structure='bar',
+                gate_rho=500,
+                gate_E=1e8,
+                gate_nu=0.35,
+                alpha=0.1,
+                gy=-1.,
+                structure_gravity=None,
+                tf=70,
+                pfreq=100), 'ETVF Rho 500 gy 1 E 1e8 nu 0.35'),
+
+            'etvf_gate_rho_500_gy_1_E_1e4_nu_0_35': (dict(
+                scheme='etvf',
+                pst='sun2019',
+                structure='bar',
+                gate_rho=500,
+                gate_E=1e4,
+                gate_nu=0.35,
+                alpha=0.1,
+                gy=-1.,
+                structure_gravity=None,
+                tf=70,
+                pfreq=100), 'ETVF Rho 500 gy 1 E 1e4 nu 0.35'),
+            # =====================
+            # Variation in E ends
+            # =====================
+
+            # =====================
+            # Variation in nu
+            # =====================
+            'etvf_gate_rho_500_gy_1_E_1e6_nu_0_4': (dict(
+                scheme='etvf',
+                pst='sun2019',
+                structure='bar',
+                gate_rho=500,
+                gate_E=1e6,
+                gate_nu=0.4,
+                alpha=0.1,
+                gy=-1.,
+                structure_gravity=None,
+                tf=70,
+                pfreq=100), 'ETVF Rho 500 gy 1 E 1e6 nu 0.4'),
+
+            'etvf_gate_rho_500_gy_1_E_1e6_nu_0_3': (dict(
+                scheme='etvf',
+                pst='sun2019',
+                structure='bar',
+                gate_rho=500,
+                gate_E=1e6,
+                gate_nu=0.3,
+                alpha=0.1,
+                gy=-1.,
+                structure_gravity=None,
+                tf=70,
+                pfreq=100), 'ETVF Rho 500 gy 1 E 1e6 nu 0.3'),
+            # =====================
+            # Variation in nu ends
+            # =====================
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
 if __name__ == '__main__':
     import matplotlib
     matplotlib.use('pdf')
 
     PROBLEMS = [
-        ElasticDamBreak2D, OscillatingPlateTurek, FSIBM1
-
+        ElasticDamBreak2D, OscillatingPlateTurek, FSIBM1, FSITest1Bar
     ]
 
     automator = Automator(simulation_dir='outputs',
