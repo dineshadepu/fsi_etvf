@@ -20,6 +20,7 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.tools.geometry import get_2d_block, rotate
 
 from fsi_coupling import FSIScheme, FSIGTVFScheme
+from fsi_substepping import FSISubSteppingScheme
 from fsi_coupling_wcsph import FSIWCSPHScheme
 
 from boundary_particles import (add_boundary_identification_properties,
@@ -246,6 +247,10 @@ class ElasticGate(Application):
 
         self.artificial_stress_eps = 0.3
 
+        self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
+        self.dt_solid = 0.25 * self.h_fluid / (
+            (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
+
     def create_particles(self):
         # ===================================
         # Create fluid
@@ -297,7 +302,7 @@ class ElasticGate(Application):
             xp, yp, xw, yw = get_fixed_beam(self.H, self.L, self.H/2.5,
                                             self.wall_layers, self.fluid_spacing)
 
-        # # make sure that the beam intersection with wall starts at the 0.
+        # make sure that the beam intersection with wall starts at the 0.
         # min_xp = np.min(xp)
 
         # # add this to the beam and wall
@@ -439,7 +444,24 @@ class ElasticGate(Application):
                                mach_no_structure=0.,
                                gy=0.)
 
-        s = SchemeChooser(default='etvf', etvf=etvf, gtvf=gtvf, wcsph=wcsph)
+        substep = FSISubSteppingScheme(fluids=['fluid'],
+                                       solids=['tank'],
+                                       structures=['gate'],
+                                       structure_solids=['gate_support'],
+                                       dt_fluid=1.,
+                                       dt_solid=1.,
+                                       dim=2,
+                                       h_fluid=0.,
+                                       rho0_fluid=0.,
+                                       pb_fluid=0.,
+                                       c0_fluid=0.,
+                                       nu_fluid=0.,
+                                       mach_no_fluid=0.,
+                                       mach_no_structure=0.,
+                                       gy=0.)
+
+        s = SchemeChooser(default='etvf', etvf=etvf, gtvf=gtvf, wcsph=wcsph,
+                          substep=substep)
         return s
 
     def configure_scheme(self):
@@ -447,6 +469,12 @@ class ElasticGate(Application):
         # TODO: This has to be changed for solid
         dt = 0.25 * self.h_fluid / (
             (self.gate_E / self.gate_rho0)**0.5 + (self.u_max_gate/50.))
+
+        self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
+        self.dt_solid = 0.25 * self.h_fluid / (
+            (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
+        if self.options.scheme == "substep":
+            dt = self.dt_fluid
 
         print("DT: %s" % dt)
         tf = 0.2
@@ -466,6 +494,11 @@ class ElasticGate(Application):
             artificial_vis_alpha=1.,
             alpha=0.1
         )
+        if self.options.scheme == 'substep':
+            self.scheme.configure(
+                dt_fluid=self.dt_fluid,
+                dt_solid=self.dt_solid
+            )
 
     def create_equations(self):
         eqns = self.scheme.get_equations()
@@ -522,7 +555,7 @@ class ElasticGate(Application):
         x_initial = gate.x[index]
 
         t, y_amplitude, x_amplitude = [], [], []
-        for sd, gate in iter_output(files[::20], 'gate'):
+        for sd, gate in iter_output(files[::1], 'gate'):
             _t = sd['t']
             t.append(_t)
             y_amplitude.append(gate.y[index] - y_initial)
@@ -570,7 +603,9 @@ class ElasticGate(Application):
         plt.xlabel('t')
         plt.ylabel('amplitude')
         plt.legend()
+        print(fname)
         fig = os.path.join(os.path.dirname(fname), "x_amplitude_with_t.png")
+        print(fig)
         plt.savefig(fig, dpi=300)
 
 

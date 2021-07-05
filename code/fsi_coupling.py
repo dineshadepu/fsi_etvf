@@ -1171,8 +1171,6 @@ class FSIScheme(Scheme):
                                              kernel_factor=self.kernel_factor))
             stage2.append(Group(eqs))
 
-        print("alpha is")
-        print(self.alpha)
         eqs = []
         for fluid in self.fluids:
             # FIXME: Change alpha to variable

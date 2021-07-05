@@ -21,6 +21,7 @@ from pysph.tools.geometry import get_2d_block, rotate
 
 from fsi_coupling import FSIScheme
 from fsi_coupling_wcsph import FSIWCSPHScheme
+from fsi_substepping import FSISubSteppingScheme
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
 
@@ -33,8 +34,8 @@ def get_hydrostatic_tank_with_fluid(fluid_length=1., fluid_height=2., tank_heigh
     import matplotlib.pyplot as plt
 
     xf, yf = get_2d_block(dx=fluid_spacing,
-                          length=fluid_length+fluid_spacing/2.,
-                          height=fluid_height+fluid_spacing/2.)
+                          length=fluid_length,
+                          height=fluid_height)
 
     xt_1, yt_1 = get_2d_block(dx=fluid_spacing,
                               length=tank_layers*fluid_spacing,
@@ -64,7 +65,7 @@ def get_elastic_plate_with_support(beam_length, beam_height, boundary_layers,
                                    spacing):
     import matplotlib.pyplot as plt
     # create a block first
-    xb, yb = get_2d_block(dx=spacing, length=beam_length + spacing/2.,
+    xb, yb = get_2d_block(dx=spacing, length=beam_length,
                           height=beam_height)
 
     # create a (support) block with required number of layers
@@ -144,7 +145,7 @@ class ElasticGate(Application):
         # ================================================
         # properties related to the only fluids
         # ================================================
-        spacing = 0.05 / 2.
+        spacing = 0.05 / 5.
         self.hdx = 1.0
 
         self.fluid_length = 1.0
@@ -162,6 +163,7 @@ class ElasticGate(Application):
         # self.solid_rho = 500
         # self.m = 1000 * self.dx * self.dx
         self.vref_fluid = np.sqrt(2 * 9.81 * self.fluid_height)
+        print("vref is ", self.vref_fluid)
         self.u_max_fluid = self.vref_fluid
         self.c0_fluid = 10 * self.vref_fluid
         self.mach_no_fluid = self.vref_fluid / self.c0_fluid
@@ -221,6 +223,11 @@ class ElasticGate(Application):
 
         self.artificial_stress_eps = 0.3
 
+        self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
+        print("dt fluid is", self.dt_fluid)
+        self.dt_solid = 0.25 * self.h_fluid / (
+            (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
+
     def create_particles(self):
         # ===================================
         # Create fluid
@@ -246,6 +253,9 @@ class ElasticGate(Application):
                                    h=self.h_fluid,
                                    rho=self.fluid_density,
                                    name="fluid")
+
+        # set the pressure of the fluid
+        fluid.p[:] = - self.fluid_density * self.gy * (max(fluid.y) - fluid.y[:])
 
         # ===================================
         # Create tank
@@ -357,7 +367,24 @@ class ElasticGate(Application):
                                mach_no_structure=0.,
                                gy=0.)
 
-        s = SchemeChooser(default='etvf', etvf=etvf, wcsph=wcsph)
+        substep = FSISubSteppingScheme(fluids=['fluid'],
+                                       solids=['tank'],
+                                       structures=['gate'],
+                                       structure_solids=['gate_support'],
+                                       dt_fluid=1.,
+                                       dt_solid=1.,
+                                       dim=2,
+                                       h_fluid=0.,
+                                       rho0_fluid=0.,
+                                       pb_fluid=0.,
+                                       c0_fluid=0.,
+                                       nu_fluid=0.,
+                                       mach_no_fluid=0.,
+                                       mach_no_structure=0.,
+                                       gy=0.)
+
+        s = SchemeChooser(default='etvf', etvf=etvf, wcsph=wcsph,
+                          substep=substep)
 
         return s
 
@@ -366,12 +393,15 @@ class ElasticGate(Application):
         # TODO: This has to be changed for solid
         dt = 0.25 * self.h_fluid / (
             (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
+        dt = 0.125 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
+        print("time step fluid dt", dt)
 
         print("DT: %s" % dt)
-        tf = 5.
+        tf = 1.
 
-        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=100)
+        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=2000)
 
+        # print(self.scheme.name)
         self.scheme.configure(
             dim=2,
             h_fluid=self.h_fluid,
@@ -385,6 +415,12 @@ class ElasticGate(Application):
             artificial_vis_alpha=1.,
             alpha=0.1
         )
+
+        if self.options.scheme == 'substep':
+            self.scheme.configure(
+                dt_fluid=self.dt_fluid,
+                dt_solid=self.dt_solid
+            )
 
     def create_equations(self):
         eqns = self.scheme.get_equations()
@@ -434,13 +470,13 @@ class ElasticGate(Application):
         pa = arrays['gate']
         y_0 = pa.y[61]
 
-        files = files[0::10]
+        files = files[0::1]
         # print(len(files))
         t, amplitude = [], []
         for sd, gate in iter_output(files, 'gate'):
             _t = sd['t']
             t.append(_t)
-            amplitude.append((y_0 - gate.y[61]) * 1e5)
+            amplitude.append((gate.y[61] - y_0) * 1)
 
         # matplotlib.use('Agg')
 
@@ -458,6 +494,11 @@ class ElasticGate(Application):
 
         # plt.plot(t_gtvf, amplitude_gtvf, "s-", label='GTVF Paper')
         plt.plot(t, amplitude, "-", label='Simulated')
+
+        # exact solution
+        t = np.linspace(0., 1., 1000)
+        y = -6.849 * 1e-5 * np.ones_like(t)
+        plt.plot(t, y, "-", label='Exact')
 
         plt.xlabel('t')
         plt.ylabel('amplitude')

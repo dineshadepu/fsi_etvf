@@ -72,7 +72,8 @@ class SolidWallPressureBCFSI(Equation):
             (self.gy - d_av[d_idx])*XIJ[1] + \
             (self.gz - d_aw[d_idx])*XIJ[2]
 
-        max_val = max(0., gdotxij)
+        # max_val = max(0., gdotxij)
+        max_val = gdotxij
         d_p_fsi[d_idx] += s_p[s_idx] * WIJ + s_rho[s_idx] * max_val * WIJ
 
     def post_loop(self, d_idx, d_wij, d_p_fsi, d_rho_fsi):
@@ -107,6 +108,76 @@ class AccelerationOnStructureDueToFluid(Equation):
         pij = d_p_fsi[d_idx] / rhoi2 + s_p[s_idx] / rhoj2
 
         tmp = -s_m[s_idx] * pij * d_m_fsi[d_idx] / d_m[d_idx]
+
+        d_au[d_idx] += tmp * DWIJ[0]
+        d_av[d_idx] += tmp * DWIJ[1]
+        d_aw[d_idx] += tmp * DWIJ[2]
+
+
+class AccelerationOnStructureDueToStructure(Equation):
+    def loop(self, d_m, d_m_fsi, d_rho_fsi, s_rho_fsi, d_idx, s_idx, d_p_fsi,
+             s_p_fsi, s_m_fsi, d_au, d_av, d_aw, DWIJ):
+        rhoi2 = d_rho_fsi[d_idx] * d_rho_fsi[d_idx]
+        rhoj2 = s_rho_fsi[s_idx] * s_rho_fsi[s_idx]
+
+        pij = d_p_fsi[d_idx] / rhoi2 + s_p_fsi[s_idx] / rhoj2
+
+        tmp = -s_m_fsi[s_idx] * pij * d_m_fsi[d_idx] / d_m[d_idx]
+
+        d_au[d_idx] += tmp * DWIJ[0]
+        d_av[d_idx] += tmp * DWIJ[1]
+        d_aw[d_idx] += tmp * DWIJ[2]
+
+
+class AccelerationOnFluidDueToStructurePita(Equation):
+    """
+    https://www.sciencedirect.com/science/article/pii/S0045782516303644
+    """
+    def loop(self, d_m, d_rho, s_rho_fsi, d_idx, s_idx, d_p, s_p_fsi, s_m_fsi,
+             d_au, d_av, d_aw, DWIJ):
+        Vi = d_m[d_idx] / d_rho[d_idx]
+        Vj = s_m_fsi[s_idx] / s_rho_fsi[s_idx]
+
+        pij = Vi * Vj * (d_p[d_idx] + s_p_fsi[s_idx])
+
+        tmp = - pij / d_m[d_idx]
+
+        d_au[d_idx] += tmp * DWIJ[0]
+        d_av[d_idx] += tmp * DWIJ[1]
+        d_aw[d_idx] += tmp * DWIJ[2]
+
+
+class AccelerationOnStructureDueToFluidPita(Equation):
+    """
+    https://www.sciencedirect.com/science/article/pii/S0045782516303644
+    """
+    def loop(self, d_m, d_m_fsi, d_rho_fsi, s_rho, d_idx, s_idx, d_p_fsi, s_p,
+             s_m, d_au, d_av, d_aw, DWIJ):
+        Vi = d_m_fsi[d_idx] / d_rho_fsi[d_idx]
+        Vj = s_m[s_idx] / s_rho[s_idx]
+
+        pij = Vi * Vj * (d_p_fsi[d_idx] + s_p[s_idx])
+
+        tmp = - pij / d_m_fsi[d_idx]
+
+        d_au[d_idx] += tmp * DWIJ[0]
+        d_av[d_idx] += tmp * DWIJ[1]
+        d_aw[d_idx] += tmp * DWIJ[2]
+
+
+class AccelerationOnStructureDueToStructurePita(Equation):
+    # TODO: THIS NEEDS TO BE FIXED
+    """
+    https://www.sciencedirect.com/science/article/pii/S0045782516303644
+    """
+    def loop(self, d_m, d_m_fsi, d_rho_fsi, s_rho, d_idx, s_idx, d_p_fsi, s_p,
+             s_m, d_au, d_av, d_aw, DWIJ):
+        Vi = d_m_fsi[d_idx] / d_rho_fsi[d_idx]
+        Vj = s_m_fsi[s_idx] / s_rho_fsi[s_idx]
+
+        pij = Vi * Vj * (d_p_fsi[d_idx] + s_p_fsi[s_idx])
+
+        tmp = - pij / d_m_fsi[d_idx]
 
         d_au[d_idx] += tmp * DWIJ[0]
         d_av[d_idx] += tmp * DWIJ[1]
@@ -264,12 +335,16 @@ class FSIWCSPHScheme(Scheme):
         self.solids = solids
 
         self.structures = structures
-        self.structure_solids = structure_solids
+        if structure_solids is None:
+            self.structure_solids = []
+        else:
+            self.structure_solids = structure_solids
 
         self.kernel_factor = kernel_factor
         self.edac_alpha = edac_alpha
         self.alpha = alpha
         self.pst = pst
+        self.fsi_force = "chung"
 
         # attributes for P Sun 2019 PST technique
         self.mach_no_fluid = mach_no_fluid
@@ -363,11 +438,17 @@ class FSIWCSPHScheme(Scheme):
                            7. Gaussian
                            8. Gaussian""" % choices)
 
+        choices = ['chung', 'pita']
+        group.add_argument(
+            "--fsi-force", action="store", dest='fsi_force', default="chung",
+            choices=choices,
+            help="Mention FSI force type (one of %s)." % choices)
+
     def consume_user_options(self, options):
         vars = [
             'alpha', 'edac_alpha', 'pst', 'debug', 'ipst_max_iterations',
             'integrator', 'internal_flow', 'ipst_tolerance', 'ipst_interval',
-            'edac', 'summation', 'kernel_choice'
+            'edac', 'summation', 'kernel_choice', 'fsi_force'
         ]
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
@@ -630,8 +711,8 @@ class FSIWCSPHScheme(Scheme):
                     SolidWallPressureBCFSI(dest=structure, sources=self.fluids,
                                            gx=self.gx, gy=self.gy, gz=self.gz))
 
-                eqs.append(
-                    ClampWallPressureFSI(dest=structure, sources=None))
+                # eqs.append(
+                #     ClampWallPressureFSI(dest=structure, sources=None))
 
             stage2.append(Group(equations=eqs, real=False))
 
@@ -672,10 +753,17 @@ class FSIWCSPHScheme(Scheme):
                     gy=self.gy, gz=self.gz), )
 
             if len(self.structure_solids + self.structures) > 0.:
-                eqs.append(
-                    AccelerationOnFluidDueToStructure(
-                        dest=fluid,
-                        sources=self.structures + self.structure_solids), )
+                if self.fsi_force == "pita":
+                    eqs.append(
+                        AccelerationOnFluidDueToStructurePita(
+                            dest=fluid,
+                            sources=self.structures + self.structure_solids), )
+
+                if self.fsi_force == "chung":
+                    eqs.append(
+                        AccelerationOnFluidDueToStructure(
+                            dest=fluid,
+                            sources=self.structures + self.structure_solids), )
 
         stage2.append(Group(equations=eqs, real=True))
         # fluid momentum equations ends
@@ -726,11 +814,22 @@ class FSIWCSPHScheme(Scheme):
 
                 g4.append(
                     MonaghanArtificialStressCorrection(dest=structure,
-                                                       sources=[structure]))
+                                                       sources=[structure]+self.structure_solids))
 
-                g4.append(
-                    AccelerationOnStructureDueToFluid(dest=structure,
-                                                      sources=self.fluids), )
+                if self.fsi_force == "pita":
+                    g4.append(
+                        AccelerationOnStructureDueToFluidPita(dest=structure,
+                                                              sources=self.fluids), )
+                    g4.append(
+                        AccelerationOnStructureDueToStructurePita(dest=structure,
+                                                                  sources=self.structures), )
+                if self.fsi_force == "chung":
+                    g4.append(
+                        AccelerationOnStructureDueToFluid(dest=structure,
+                                                          sources=self.fluids), )
+                    # g4.append(
+                    #     AccelerationOnStructureDueToStructure(dest=structure,
+                    #                                           sources=self.structures), )
 
             stage2.append(Group(g4))
 
@@ -995,7 +1094,8 @@ class FSIWCSPHScheme(Scheme):
 
             add_properties(pa, 'ug', 'vg', 'wg', 'uf', 'vf', 'wf', 's00',
                            's01', 's02', 's11', 's12', 's22', 'cs', 'uhat',
-                           'vhat', 'what')
+                           'vhat', 'what',
+                           'r00', 'r12', 'r01', 'r22', 'r11', 'r02')
 
             cs = np.ones_like(pa.x) * get_speed_of_sound(
                 pa.E[0], pa.nu[0], pa.rho_ref[0])

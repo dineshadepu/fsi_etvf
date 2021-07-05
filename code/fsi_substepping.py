@@ -79,6 +79,75 @@ class SolidWallPressureBCFSI(Equation):
         d_rho_fsi[d_idx] = self.rho_0 * (d_p_fsi[d_idx] / self.p_0 + 1.)
 
 
+class EDACEquationFSI(Equation):
+    def __init__(self, dest, sources, nu):
+        self.nu = nu
+        super(EDACEquationFSI, self).__init__(dest, sources)
+
+    def initialize(self, d_ap, d_idx):
+        d_ap[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, d_p, d_rho, d_c0_ref, d_u, d_v, d_w, d_uhat,
+             d_vhat, d_what, s_p_fsi, s_m_fsi, s_rho_fsi, d_ap, DWIJ, XIJ,
+             s_uhat, s_vhat, s_what, s_u, s_v, s_w, R2IJ, VIJ, EPS):
+        vhatij = declare('matrix(3)')
+        vhatij[0] = d_uhat[d_idx] - s_uhat[s_idx]
+        vhatij[1] = d_vhat[d_idx] - s_vhat[s_idx]
+        vhatij[2] = d_what[d_idx] - s_what[s_idx]
+
+        cs2 = d_c0_ref[0] * d_c0_ref[0]
+
+        rhoj1 = 1.0 / s_rho_fsi[s_idx]
+        Vj = s_m_fsi[s_idx] * rhoj1
+        rhoi = d_rho[d_idx]
+        pi = d_p[d_idx]
+        rhoj = s_rho_fsi[s_idx]
+        pj = s_p_fsi[s_idx]
+
+        vij_dot_dwij = -(VIJ[0] * DWIJ[0] + VIJ[1] * DWIJ[1] +
+                         VIJ[2] * DWIJ[2])
+
+        vhatij_dot_dwij = -(vhatij[0] * DWIJ[0] + vhatij[1] * DWIJ[1] +
+                            vhatij[2] * DWIJ[2])
+
+        # vhatij_dot_dwij = (VIJ[0]*DWIJ[0] + VIJ[1]*DWIJ[1] +
+        #                    VIJ[2]*DWIJ[2])
+
+        #######################################################
+        # first term on the rhs of Eq 23 of the current paper #
+        #######################################################
+        d_ap[d_idx] += (pi - rhoi * cs2) * Vj * vij_dot_dwij
+
+        #######################################################
+        # second term on the rhs of Eq 23 of the current paper #
+        #######################################################
+        d_ap[d_idx] += -pi * Vj * vhatij_dot_dwij
+
+        ########################################################
+        # third term on the rhs of Eq 19 of the current paper #
+        ########################################################
+        tmp0 = pj * (s_uhat[s_idx] - s_u[s_idx]) - pi * (d_uhat[d_idx] -
+                                                         d_u[d_idx])
+
+        tmp1 = pj * (s_vhat[s_idx] - s_v[s_idx]) - pi * (d_vhat[d_idx] -
+                                                         d_v[d_idx])
+
+        tmp2 = pj * (s_what[s_idx] - s_w[s_idx]) - pi * (d_what[d_idx] -
+                                                         d_w[d_idx])
+
+        tmpdotdwij = (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
+        d_ap[d_idx] += -Vj * tmpdotdwij
+
+        #######################################################
+        # fourth term on the rhs of Eq 19 of the current paper #
+        #######################################################
+        rhoij = d_rho[d_idx] + s_rho_fsi[s_idx]
+        # The viscous damping of pressure.
+        xijdotdwij = DWIJ[0] * XIJ[0] + DWIJ[1] * XIJ[1] + DWIJ[2] * XIJ[2]
+        tmp = Vj * 4 * xijdotdwij / (rhoij * (R2IJ + EPS))
+        d_ap[d_idx] += self.nu * tmp * (d_p[d_idx] - s_p_fsi[s_idx])
+
+
 class AccelerationOnFluidDueToStructure(Equation):
     def loop(self, d_rho, s_rho_fsi, d_idx, s_idx, d_p, s_p_fsi, s_m, s_m_fsi,
              d_au, d_av, d_aw, DWIJ):
@@ -473,6 +542,8 @@ class FSISubSteppingScheme(Scheme):
             self.kernel = SuperGaussian
             self.kernel_factor = 3
 
+        print(self.dt_fluid)
+        print(self.dt_solid)
         self.dt_factor = int(self.dt_fluid / self.dt_solid) + 1
         print("dt factor is")
         print(self.dt_factor)
@@ -619,43 +690,34 @@ class FSISubSteppingScheme(Scheme):
             eqs.append(
                 ContinuityEquationETVFCorrection(dest=fluid,
                                                  sources=self.fluids+self.solids), )
-            # if self.edac is True:
-            #     eqs.append(
-            #         EDACEquation(dest=fluid, sources=self.fluids,
-            #                      nu=nu_edac), )
+            eqs.append(
+                EDACEquation(dest=fluid, sources=self.fluids,
+                             nu=nu_edac), )
 
-        # if len(self.solids) > 0:
-        #     for fluid in self.fluids:
-        #         eqs.append(
-        #             ContinuitySolidEquationGTVF(dest=fluid,
-        #                                         sources=self.solids), )
-        #         eqs.append(
-        #             ContinuitySolidEquationETVFCorrection(
-        #                 dest=fluid, sources=self.solids), )
-
-        #     # if self.edac is True:
-        #     #     eqs.append(
-        #     #         EDACSolidEquation(dest=fluid, sources=self.solids,
-        #     #                           nu=nu_edac), )
+        if len(self.solids) > 0:
+            for fluid in self.fluids:
+                eqs.append(
+                    EDACEquation(dest=fluid, sources=self.solids,
+                                 nu=nu_edac), )
 
         # TODO: Should we use direct density or the density of the fluid
         if len(self.structures) > 0:
             for fluid in self.fluids:
-                # eqs.append(
-                #     ContinuitySolidEquationGTVFFSI(dest=fluid,
-                #                                    sources=self.structures), )
                 eqs.append(
                     ContinuitySolidEquationETVFCorrectionFSI(
                         dest=fluid, sources=self.structures), )
+                eqs.append(
+                    EDACEquationFSI(dest=fluid, sources=self.structures,
+                                    nu=nu_edac), )
 
         if len(self.structure_solids) > 0:
             for fluid in self.fluids:
-                # eqs.append(
-                #     ContinuitySolidEquationGTVFFSI(dest=fluid,
-                #                                    sources=self.structure_solids))
                 eqs.append(
                     ContinuitySolidEquationETVFCorrectionFSI(
                         dest=fluid, sources=self.structure_solids))
+                eqs.append(
+                    EDACEquationFSI(dest=fluid, sources=self.structure_solids,
+                                    nu=nu_edac), )
 
         stage1.append(Group(equations=eqs, real=False))
 
@@ -664,15 +726,6 @@ class FSISubSteppingScheme(Scheme):
             eqs.append(FluidStage2(dest=fluid, sources=None, dt=self.dt_fluid_simulated))
 
         stage1.append(Group(equations=eqs, real=False))
-
-        tmp = []
-        for fluid in self.fluids:
-            tmp.append(
-                # TODO: THESE PRESSURE VALUES WILL BE DIFFERENT FOR DIFFERENT PHASES
-                StateEquation(dest=fluid, sources=None, p0=self.pb_fluid,
-                              rho0=self.rho0_fluid))
-
-        stage1.append(Group(equations=tmp, real=False))
 
         if len(self.solids) > 0:
             eqs = []
