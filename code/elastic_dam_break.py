@@ -20,7 +20,7 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.tools.geometry import get_2d_block, rotate
 
 from fsi_coupling import FSIScheme, FSIGTVFScheme
-from fsi_substepping import FSISubSteppingScheme
+from fsi_substepping import FSISubSteppingScheme, FSISubSteppingWCSPHScheme
 from fsi_coupling_wcsph import FSIWCSPHScheme
 
 from boundary_particles import (add_boundary_identification_properties,
@@ -460,8 +460,24 @@ class ElasticGate(Application):
                                        mach_no_structure=0.,
                                        gy=0.)
 
+        wcsph_substep = FSISubSteppingWCSPHScheme(fluids=['fluid'],
+                                                  solids=['tank'],
+                                                  structures=['gate'],
+                                                  structure_solids=['gate_support'],
+                                                  dt_fluid=1.,
+                                                  dt_solid=1.,
+                                                  dim=2,
+                                                  h_fluid=0.,
+                                                  rho0_fluid=0.,
+                                                  pb_fluid=0.,
+                                                  c0_fluid=0.,
+                                                  nu_fluid=0.,
+                                                  mach_no_fluid=0.,
+                                                  mach_no_structure=0.,
+                                                  gy=0.)
+
         s = SchemeChooser(default='etvf', etvf=etvf, gtvf=gtvf, wcsph=wcsph,
-                          substep=substep)
+                          substep=substep, sswcsph=wcsph_substep)
         return s
 
     def configure_scheme(self):
@@ -473,7 +489,7 @@ class ElasticGate(Application):
         self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
         self.dt_solid = 0.25 * self.h_fluid / (
             (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
-        if self.options.scheme == "substep":
+        if self.options.scheme == "substep" or "sswcsph":
             dt = self.dt_fluid
 
         print("DT: %s" % dt)
@@ -494,7 +510,7 @@ class ElasticGate(Application):
             artificial_vis_alpha=1.,
             alpha=0.1
         )
-        if self.options.scheme == 'substep':
+        if self.options.scheme == 'substep' or 'sswcsph':
             self.scheme.configure(
                 dt_fluid=self.dt_fluid,
                 dt_solid=self.dt_solid
