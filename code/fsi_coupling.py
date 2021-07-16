@@ -1194,6 +1194,14 @@ class FSIScheme(Scheme):
                         )
                     )
 
+            # if self.nu_fluid > 0.:
+            #     eqs.append(
+            #         MomentumEquationViscosity(
+            #             dest=fluid, sources=self.fluids, nu=self.nu_fluid
+            #         )
+
+            #     )
+
             eqs.append(
                 MomentumEquationPressureGradient(
                     dest=fluid, sources=self.fluids + self.solids, gx=self.gx,

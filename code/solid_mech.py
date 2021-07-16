@@ -7,6 +7,7 @@ References
 """
 
 from numpy import sqrt, fabs
+import numpy
 from pysph.sph.equation import Equation
 from pysph.sph.scheme import Scheme
 from pysph.sph.scheme import add_bool_argument
@@ -29,6 +30,8 @@ from boundary_particles import (ComputeNormalsEDAC, SmoothNormalsEDAC,
 from pysph.sph.wc.transport_velocity import SetWallVelocity
 
 from pysph.examples.solid_mech.impact import add_properties
+from boundary_particles import (ComputeNormals, SmoothNormals,
+                                IdentifyBoundaryParticleCosAngleEDAC)
 
 from pysph.sph.integrator import Integrator
 
@@ -118,128 +121,6 @@ class VelocityGradient3DUhat(Equation):
         vij[0] = d_uhat[d_idx] - s_uhat[s_idx]
         vij[1] = d_vhat[d_idx] - s_vhat[s_idx]
         vij[2] = d_what[d_idx] - s_what[s_idx]
-
-        tmp = s_m[s_idx] / s_rho[s_idx]
-
-        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
-        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
-        d_v02[d_idx] += tmp * -vij[0] * DWIJ[2]
-
-        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
-        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
-        d_v12[d_idx] += tmp * -vij[1] * DWIJ[2]
-
-        d_v20[d_idx] += tmp * -vij[2] * DWIJ[0]
-        d_v21[d_idx] += tmp * -vij[2] * DWIJ[1]
-        d_v22[d_idx] += tmp * -vij[2] * DWIJ[2]
-
-
-class VelocityGradient2DSolid(Equation):
-    def initialize(self, d_idx, d_v00, d_v01, d_v10, d_v11):
-        d_v00[d_idx] = 0.0
-        d_v01[d_idx] = 0.0
-        d_v10[d_idx] = 0.0
-        d_v11[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, s_m, s_rho, d_v00, d_v01, d_v10, d_v11, d_u,
-             d_v, d_w, s_ug, s_vg, s_wg, DWIJ):
-        vij = declare('matrix(3)')
-        vij[0] = d_u[d_idx] - s_ug[s_idx]
-        vij[1] = d_v[d_idx] - s_vg[s_idx]
-        vij[2] = d_w[d_idx] - s_wg[s_idx]
-
-        tmp = s_m[s_idx] / s_rho[s_idx]
-
-        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
-        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
-
-        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
-        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
-
-
-class VelocityGradient3DSolid(Equation):
-    def initialize(self, d_idx, d_v00, d_v01, d_v02, d_v10, d_v11, d_v12,
-                   d_v20, d_v21, d_v22):
-        d_v00[d_idx] = 0.0
-        d_v01[d_idx] = 0.0
-        d_v02[d_idx] = 0.0
-
-        d_v10[d_idx] = 0.0
-        d_v11[d_idx] = 0.0
-        d_v12[d_idx] = 0.0
-
-        d_v20[d_idx] = 0.0
-        d_v21[d_idx] = 0.0
-        d_v22[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, s_m, s_rho, d_v00, d_v01, d_v02, d_v10, d_v11,
-             d_v12, d_v20, d_v21, d_v22, d_u, d_v, d_w, s_ug, s_vg, s_wg,
-             DWIJ):
-        vij = declare('matrix(3)')
-        vij[0] = d_u[d_idx] - s_ug[s_idx]
-        vij[1] = d_v[d_idx] - s_vg[s_idx]
-        vij[2] = d_w[d_idx] - s_wg[s_idx]
-
-        tmp = s_m[s_idx] / s_rho[s_idx]
-
-        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
-        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
-        d_v02[d_idx] += tmp * -vij[0] * DWIJ[2]
-
-        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
-        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
-        d_v12[d_idx] += tmp * -vij[1] * DWIJ[2]
-
-        d_v20[d_idx] += tmp * -vij[2] * DWIJ[0]
-        d_v21[d_idx] += tmp * -vij[2] * DWIJ[1]
-        d_v22[d_idx] += tmp * -vij[2] * DWIJ[2]
-
-
-class VelocityGradient2DUhatSolid(Equation):
-    def initialize(self, d_idx, d_v00, d_v01, d_v10, d_v11):
-        d_v00[d_idx] = 0.0
-        d_v01[d_idx] = 0.0
-        d_v10[d_idx] = 0.0
-        d_v11[d_idx] = 0.0
-
-    def loop(self, d_uhat, d_vhat, d_what, d_idx, s_idx, s_m, s_rho, d_v00,
-             d_v01, d_v10, d_v11, s_ughat, s_vghat, s_wghat, DWIJ):
-        vij = declare('matrix(3)')
-        vij[0] = d_uhat[d_idx] - s_ughat[s_idx]
-        vij[1] = d_vhat[d_idx] - s_vghat[s_idx]
-        vij[2] = d_what[d_idx] - s_wghat[s_idx]
-
-        tmp = s_m[s_idx] / s_rho[s_idx]
-
-        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
-        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
-
-        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
-        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
-
-
-class VelocityGradient3DUhatSolid(Equation):
-    def initialize(self, d_idx, d_v00, d_v01, d_v02, d_v10, d_v11, d_v12,
-                   d_v20, d_v21, d_v22):
-        d_v00[d_idx] = 0.0
-        d_v01[d_idx] = 0.0
-        d_v02[d_idx] = 0.0
-
-        d_v10[d_idx] = 0.0
-        d_v11[d_idx] = 0.0
-        d_v12[d_idx] = 0.0
-
-        d_v20[d_idx] = 0.0
-        d_v21[d_idx] = 0.0
-        d_v22[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, s_m, s_rho, d_v00, d_v01, d_v02, d_v10, d_v11,
-             d_v12, d_v20, d_v21, d_v22, d_uhat, d_vhat, d_what, s_ughat,
-             s_vghat, s_wghat, DWIJ, VIJ):
-        vij = declare('matrix(3)')
-        vij[0] = d_uhat[d_idx] - s_ughat[s_idx]
-        vij[1] = d_vhat[d_idx] - s_vghat[s_idx]
-        vij[2] = d_what[d_idx] - s_wghat[s_idx]
 
         tmp = s_m[s_idx] / s_rho[s_idx]
 
@@ -1471,6 +1352,283 @@ class MakeAuhatZero(Equation):
         d_awhat[d_idx] = 0.
 
 
+class ContinuityEquationSolid(Equation):
+    def initialize(self, d_idx, d_arho):
+        d_arho[d_idx] = 0.0
+
+    def loop(self, d_idx, d_arho, s_idx, s_m, d_u, d_v, d_w, s_ub, s_vb, s_wb,
+             DWIJ):
+        vij = declare('matrix(3)')
+
+        vij[0] = d_u[d_idx] - s_ub[s_idx]
+        vij[1] = d_v[d_idx] - s_vb[s_idx]
+        vij[2] = d_w[d_idx] - s_wb[s_idx]
+
+        vijdotdwij = DWIJ[0]*vij[0] + DWIJ[1]*vij[1] + DWIJ[2]*vij[2]
+        d_arho[d_idx] += s_m[s_idx]*vijdotdwij
+
+
+class ContinuityEquationUhatSolid(Equation):
+    def initialize(self, d_idx, d_arho):
+        d_arho[d_idx] = 0.0
+
+    def loop(self, d_idx, d_arho, d_uhat, d_vhat, d_what, s_idx, s_m, s_ubhat,
+             s_vbhat, s_wbhat, DWIJ):
+        vij = declare('matrix(3)')
+        vij[0] = d_uhat[d_idx] - s_ubhat[s_idx]
+        vij[1] = d_vhat[d_idx] - s_vbhat[s_idx]
+        vij[2] = d_what[d_idx] - s_wbhat[s_idx]
+
+        vijdotdwij = DWIJ[0] * vij[0] + DWIJ[1] * vij[1] + DWIJ[2] * vij[2]
+        d_arho[d_idx] += s_m[s_idx] * vijdotdwij
+
+
+class ContinuityEquationETVFCorrectionSolid(Equation):
+    """
+    This is the additional term arriving in the new ETVF continuity equation
+    """
+    def loop(self, d_idx, d_arho, d_rho, d_u, d_v, d_w, d_uhat, d_vhat, d_what,
+             s_idx, s_rho, s_m, s_ub, s_vb, s_wb, s_ubhat, s_vbhat, s_wbhat,
+             DWIJ):
+        tmp0 = s_rho[s_idx] * (s_ubhat[s_idx] - s_ub[s_idx]) - d_rho[d_idx] * (
+            d_uhat[d_idx] - d_u[d_idx])
+
+        tmp1 = s_rho[s_idx] * (s_vbhat[s_idx] - s_vb[s_idx]) - d_rho[d_idx] * (
+            d_vhat[d_idx] - d_v[d_idx])
+
+        tmp2 = s_rho[s_idx] * (s_wbhat[s_idx] - s_wb[s_idx]) - d_rho[d_idx] * (
+            d_what[d_idx] - d_w[d_idx])
+
+        vijdotdwij = (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
+
+        d_arho[d_idx] += s_m[s_idx] / s_rho[s_idx] * vijdotdwij
+
+
+class VelocityGradient2DSolid(Equation):
+    def initialize(self, d_idx, d_v00, d_v01, d_v10, d_v11):
+        d_v00[d_idx] = 0.0
+        d_v01[d_idx] = 0.0
+        d_v10[d_idx] = 0.0
+        d_v11[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, s_m, s_rho, d_v00, d_v01, d_v10, d_v11, d_u,
+             d_v, d_w, s_ub, s_vb, s_wb, DWIJ):
+        vij = declare('matrix(3)')
+        vij[0] = d_u[d_idx] - s_ub[s_idx]
+        vij[1] = d_v[d_idx] - s_vb[s_idx]
+        vij[2] = d_w[d_idx] - s_wb[s_idx]
+
+        tmp = s_m[s_idx] / s_rho[s_idx]
+
+        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
+        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
+
+        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
+        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
+
+
+class VelocityGradient3DSolid(Equation):
+    def initialize(self, d_idx, d_v00, d_v01, d_v02, d_v10, d_v11, d_v12,
+                   d_v20, d_v21, d_v22):
+        d_v00[d_idx] = 0.0
+        d_v01[d_idx] = 0.0
+        d_v02[d_idx] = 0.0
+
+        d_v10[d_idx] = 0.0
+        d_v11[d_idx] = 0.0
+        d_v12[d_idx] = 0.0
+
+        d_v20[d_idx] = 0.0
+        d_v21[d_idx] = 0.0
+        d_v22[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, s_m, s_rho, d_v00, d_v01, d_v02, d_v10, d_v11,
+             d_v12, d_v20, d_v21, d_v22, d_u, d_v, d_w, s_ub, s_vb, s_wb,
+             DWIJ):
+        vij = declare('matrix(3)')
+        vij[0] = d_u[d_idx] - s_ub[s_idx]
+        vij[1] = d_v[d_idx] - s_vb[s_idx]
+        vij[2] = d_w[d_idx] - s_wb[s_idx]
+
+        tmp = s_m[s_idx] / s_rho[s_idx]
+
+        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
+        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
+        d_v02[d_idx] += tmp * -vij[0] * DWIJ[2]
+
+        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
+        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
+        d_v12[d_idx] += tmp * -vij[1] * DWIJ[2]
+
+        d_v20[d_idx] += tmp * -vij[2] * DWIJ[0]
+        d_v21[d_idx] += tmp * -vij[2] * DWIJ[1]
+        d_v22[d_idx] += tmp * -vij[2] * DWIJ[2]
+
+
+class VelocityGradient2DUhatSolid(Equation):
+    def initialize(self, d_idx, d_v00, d_v01, d_v10, d_v11):
+        d_v00[d_idx] = 0.0
+        d_v01[d_idx] = 0.0
+        d_v10[d_idx] = 0.0
+        d_v11[d_idx] = 0.0
+
+    def loop(self, d_uhat, d_vhat, d_what, d_idx, s_idx, s_m, s_rho, d_v00,
+             d_v01, d_v10, d_v11, s_ubhat, s_vbhat, s_wbhat, DWIJ):
+        vij = declare('matrix(3)')
+        vij[0] = d_uhat[d_idx] - s_ubhat[s_idx]
+        vij[1] = d_vhat[d_idx] - s_vbhat[s_idx]
+        vij[2] = d_what[d_idx] - s_wbhat[s_idx]
+
+        tmp = s_m[s_idx] / s_rho[s_idx]
+
+        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
+        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
+
+        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
+        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
+
+
+class VelocityGradient3DUhatSolid(Equation):
+    def initialize(self, d_idx, d_v00, d_v01, d_v02, d_v10, d_v11, d_v12,
+                   d_v20, d_v21, d_v22):
+        d_v00[d_idx] = 0.0
+        d_v01[d_idx] = 0.0
+        d_v02[d_idx] = 0.0
+
+        d_v10[d_idx] = 0.0
+        d_v11[d_idx] = 0.0
+        d_v12[d_idx] = 0.0
+
+        d_v20[d_idx] = 0.0
+        d_v21[d_idx] = 0.0
+        d_v22[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, s_m, s_rho, d_v00, d_v01, d_v02, d_v10, d_v11,
+             d_v12, d_v20, d_v21, d_v22, d_uhat, d_vhat, d_what, s_ubhat,
+             s_vbhat, s_wbhat, DWIJ, VIJ):
+        vij = declare('matrix(3)')
+        vij[0] = d_uhat[d_idx] - s_ubhat[s_idx]
+        vij[1] = d_vhat[d_idx] - s_vbhat[s_idx]
+        vij[2] = d_what[d_idx] - s_wbhat[s_idx]
+
+        tmp = s_m[s_idx] / s_rho[s_idx]
+
+        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
+        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
+        d_v02[d_idx] += tmp * -vij[0] * DWIJ[2]
+
+        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
+        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
+        d_v12[d_idx] += tmp * -vij[1] * DWIJ[2]
+
+        d_v20[d_idx] += tmp * -vij[2] * DWIJ[0]
+        d_v21[d_idx] += tmp * -vij[2] * DWIJ[1]
+        d_v22[d_idx] += tmp * -vij[2] * DWIJ[2]
+
+
+class SetWallVelocityNoSlipUSolidMech(Equation):
+    def initialize(self, d_idx, d_uf, d_vf, d_wf, d_ub, d_vb, d_wb, d_wij):
+        d_uf[d_idx] = 0.0
+        d_vf[d_idx] = 0.0
+        d_wf[d_idx] = 0.0
+
+        d_ub[d_idx] = 0.0
+        d_vb[d_idx] = 0.0
+        d_wb[d_idx] = 0.0
+        d_wij[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, s_rho, s_m, d_uf, d_vf, d_wf, s_u, s_v, s_w,
+             d_wij, WIJ):
+        # normalisation factor is different from 'V' as the particles
+        # near the boundary do not have full kernel support
+        d_wij[d_idx] += WIJ
+
+        # sum in Eq. (22)
+        # this will be normalized in post loop
+        d_uf[d_idx] += s_u[s_idx] * WIJ
+        d_vf[d_idx] += s_v[s_idx] * WIJ
+        d_wf[d_idx] += s_w[s_idx] * WIJ
+
+    def post_loop(self, d_uf, d_vf, d_wf, d_wij, d_idx, d_ub, d_vb, d_wb, d_u,
+                  d_v, d_w, d_normal):
+        idx3 = declare('int', 1)
+        idx3 = 3 * d_idx
+        # calculation is done only for the relevant boundary particles.
+        # d_wij (and d_uf) is 0 for particles sufficiently away from the
+        # solid-fluid interface
+        if d_wij[d_idx] > 1e-12:
+            d_uf[d_idx] /= d_wij[d_idx]
+            d_vf[d_idx] /= d_wij[d_idx]
+            d_wf[d_idx] /= d_wij[d_idx]
+
+        # For No slip boundary conditions
+        # Dummy velocities at the ghost points using Eq. (23),
+        # d_u, d_v, d_w are the prescribed wall velocities.
+        d_ub[d_idx] = 2 * d_u[d_idx] - d_uf[d_idx]
+        d_vb[d_idx] = 2 * d_v[d_idx] - d_vf[d_idx]
+        d_wb[d_idx] = 2 * d_w[d_idx] - d_wf[d_idx]
+
+        vn = (d_ub[d_idx]*d_normal[idx3] + d_vb[d_idx]*d_normal[idx3+1]
+              + d_wb[d_idx]*d_normal[idx3+2])
+        if vn < 0:
+            d_ub[d_idx] -= vn*d_normal[idx3]
+            d_vb[d_idx] -= vn*d_normal[idx3+1]
+            d_wb[d_idx] -= vn*d_normal[idx3+2]
+
+
+class SetWallVelocityNoSlipUhatSolidMech(Equation):
+    def initialize(self, d_idx, d_uf, d_vf, d_wf,
+                   d_ubhat, d_vbhat, d_wbhat,
+                   d_wij):
+        d_uf[d_idx] = 0.0
+        d_vf[d_idx] = 0.0
+        d_wf[d_idx] = 0.0
+
+        d_ubhat[d_idx] = 0.0
+        d_vbhat[d_idx] = 0.0
+        d_wbhat[d_idx] = 0.0
+        d_wij[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, s_rho, s_m, d_uf, d_vf, d_wf, s_u, s_v, s_w,
+             d_ubhat, d_vbhat, d_wbhat, s_uhat, s_vhat, s_what,
+             d_wij, WIJ):
+        # normalisation factor is different from 'V' as the particles
+        # near the boundary do not have full kernel support
+        d_wij[d_idx] += WIJ
+
+        # sum in Eq. (22)
+        # this will be normalized in post loop
+        d_uf[d_idx] += s_uhat[s_idx] * WIJ
+        d_vf[d_idx] += s_vhat[s_idx] * WIJ
+        d_wf[d_idx] += s_what[s_idx] * WIJ
+
+    def post_loop(self, d_uf, d_vf, d_wf, d_wij, d_idx, d_ubhat, d_vbhat,
+                  d_wbhat, d_uhat, d_vhat, d_what, d_normal):
+        idx3 = declare('int', 1)
+        idx3 = 3 * d_idx
+        # calculation is done only for the relevant boundary particles.
+        # d_wij (and d_uf) is 0 for particles sufficiently away from the
+        # solid-fluid interface
+        if d_wij[d_idx] > 1e-12:
+            d_uf[d_idx] /= d_wij[d_idx]
+            d_vf[d_idx] /= d_wij[d_idx]
+            d_wf[d_idx] /= d_wij[d_idx]
+
+        # For No slip boundary conditions
+        # Dummy velocities at the ghost points using Eq. (23),
+        # d_u, d_v, d_w are the prescribed wall velocities.
+        d_ubhat[d_idx] = 2 * d_uhat[d_idx] - d_uf[d_idx]
+        d_vbhat[d_idx] = 2 * d_vhat[d_idx] - d_vf[d_idx]
+        d_wbhat[d_idx] = 2 * d_what[d_idx] - d_wf[d_idx]
+
+        vn = (d_ubhat[d_idx]*d_normal[idx3] + d_vbhat[d_idx]*d_normal[idx3+1]
+              + d_wbhat[d_idx]*d_normal[idx3+2])
+        if vn < 0:
+            d_ubhat[d_idx] -= vn*d_normal[idx3]
+            d_vbhat[d_idx] -= vn*d_normal[idx3+1]
+            d_wbhat[d_idx] -= vn*d_normal[idx3+2]
+
+
 class SolidsScheme(Scheme):
     """
 
@@ -1735,53 +1893,94 @@ class SolidsScheme(Scheme):
         # =================================== #
         # solid velocity extrapolation ends
         # =================================== #
-        # tmp = []
-        # if self.adami_velocity_extrapolate is True:
-        #     if self.no_slip is True:
-        #         if len(self.boundaries) > 0:
-        #             for boundary in self.boundaries:
-        #                 tmp.append(
-        #                     SetWallVelocity(dest=boundary,
-        #                                     sources=self.solids))
+        tmp = []
+        if len(self.boundaries) > 0:
+            for boundary in self.boundaries:
+                # if self.free_slip is True:
+                #     tmp.append(
+                #         SetWallVelocityFreeSlipSolidMech(dest=boundary,
+                #                                          sources=self.solids))
 
-        #     if self.free_slip is True:
-        #         if len(self.boundary) > 0:
-        #             for boundary in self.boundaries:
-        #                 tmp.append(
-        #                     SetWallVelocityFreeSlip(dest=boundary,
-        #                                             sources=self.solids))
-        #     stage1.append(Group(equations=tmp))
+                # else:
+                tmp.append(
+                    SetWallVelocityNoSlipUhatSolidMech(dest=boundary,
+                                                       sources=self.solids))
+            stage1.append(Group(equations=tmp))
+
+        tmp = []
+        if len(self.boundaries) > 0:
+            for boundary in self.boundaries:
+                # if self.free_slip is True:
+                #     tmp.append(
+                #         SetWallVelocityFreeSlipSolidMech(dest=boundary,
+                #                                          sources=self.solids))
+
+                # else:
+                tmp.append(
+                    SetWallVelocityNoSlipUSolidMech(dest=boundary,
+                                                    sources=self.solids))
+            stage1.append(Group(equations=tmp))
         # =================================== #
         # solid velocity extrapolation ends
         # =================================== #
 
         for solid in self.solids:
             if self.use_uhat_cont is True:
-                g1.append(ContinuityEquationUhat(dest=solid, sources=all))
+                g1.append(ContinuityEquationUhat(dest=solid, sources=self.solids))
             else:
-                g1.append(ContinuityEquation(dest=solid, sources=all))
+                g1.append(ContinuityEquation(dest=solid, sources=self.solids))
 
             if self.continuity_tvf_correction is True:
                 g1.append(
-                    ContinuityEquationETVFCorrection(dest=solid, sources=all))
+                    ContinuityEquationETVFCorrection(dest=solid,
+                                                     sources=self.solids))
 
             if self.use_uhat_velgrad is True:
                 if self.dim == 2:
-                    g1.append(VelocityGradient2DUhat(dest=solid, sources=all))
+                    g1.append(
+                        VelocityGradient2DUhat(dest=solid, sources=self.solids))
                 elif self.dim == 3:
-                    g1.append(VelocityGradient3DUhat(dest=solid, sources=all))
+                    g1.append(
+                        VelocityGradient3DUhat(dest=solid, sources=self.solids))
             else:
                 if self.dim == 2:
-                    g1.append(VelocityGradient2D(dest=solid, sources=all))
+                    g1.append(VelocityGradient2D(dest=solid, sources=self.solids))
                 elif self.dim == 3:
-                    g1.append(VelocityGradient3D(dest=solid, sources=all))
+                    g1.append(VelocityGradient3D(dest=solid, sources=self.solids))
 
-            if self.shear_stress_tvf_correction is True:
-                g1.append(
-                    ComputeDivDeviatoricStressOuterVelocity(
-                        dest=solid, sources=all))
+            if len(self.boundaries) > 0:
+                if self.use_uhat_cont is True:
+                    g1.append(
+                        ContinuityEquationUhatSolid(dest=solid,
+                                                    sources=self.boundaries))
+                else:
+                    g1.append(
+                        ContinuityEquationSolid(dest=solid,
+                                                sources=self.boundaries))
 
-                g1.append(ComputeDivVelocity(dest=solid, sources=all))
+                if self.continuity_tvf_correction is True:
+                    g1.append(
+                        ContinuityEquationETVFCorrectionSolid(
+                            dest=solid, sources=self.boundaries))
+
+                if self.use_uhat_velgrad is True:
+                    if self.dim == 2:
+                        g1.append(
+                            VelocityGradient2DUhatSolid(
+                                dest=solid, sources=self.boundaries))
+                    elif self.dim == 3:
+                        g1.append(
+                            VelocityGradient3DUhatSolid(
+                                dest=solid, sources=self.boundaries))
+                else:
+                    if self.dim == 2:
+                        g1.append(
+                            VelocityGradient2DSolid(dest=solid,
+                                                    sources=self.boundaries))
+                    elif self.dim == 3:
+                        g1.append(
+                            VelocityGradient3DSolid(dest=solid,
+                                                    sources=self.boundaries))
 
             if self.pst == "gray":
                 g1.append(
@@ -1797,10 +1996,6 @@ class SolidsScheme(Scheme):
         for solid in self.solids:
             g2.append(HookesDeviatoricStressRate(dest=solid, sources=None))
 
-            if self.shear_stress_tvf_correction is True:
-                g2.append(
-                    HookesDeviatoricStressRateETVFCorrection(
-                        dest=solid, sources=None))
         stage1.append(Group(equations=g2))
 
         # edac pressure evolution equation
@@ -2133,7 +2328,8 @@ class SolidsScheme(Scheme):
 
             add_properties(pa, 'ug', 'vg', 'wg', 'uf', 'vf', 'wf', 's00',
                            's01', 's02', 's11', 's12', 's22', 'cs', 'uhat',
-                           'vhat', 'what')
+                           'vhat', 'what', 'ub', 'vb', 'wb', 'ubhat', 'vbhat',
+                           'wbhat')
 
             cs = np.ones_like(pa.x) * get_speed_of_sound(
                 pa.E[0], pa.nu[0], pa.rho_ref[0])
@@ -2158,6 +2354,27 @@ class SolidsScheme(Scheme):
 
             if self.kernel_choice == "4":
                 pa.h[:] = pa.h[:] / self.hdx * 2.
+
+            pa.add_property('normal', stride=3)
+            pa.add_output_arrays(['normal'])
+            pa.add_property('normal_tmp', stride=3)
+
+            name = pa.name
+            props = ['m', 'rho', 'h']
+            for p in props:
+                x = pa.get(p)
+                if numpy.all(x < 1e-12):
+                    msg = f'WARNING: cannot compute normals "{p}" is zero'
+                    print(msg)
+
+            seval = SPHEvaluator(
+                arrays=[pa], equations=[
+                    Group(
+                        equations=[ComputeNormals(dest=name, sources=[name])]),
+                    Group(
+                        equations=[SmoothNormals(dest=name, sources=[name])]),
+                ], dim=self.dim)
+            seval.evaluate()
 
     def get_solver(self):
         return self.solver
@@ -2312,695 +2529,3 @@ class LimitDeviatoricStress(Equation):
         d_s11[d_idx] = d_plastic_limit[d_idx] * d_s11[d_idx]
         d_s12[d_idx] = d_plastic_limit[d_idx] * d_s12[d_idx]
         d_s22[d_idx] = d_plastic_limit[d_idx] * d_s22[d_idx]
-
-
-class SolidsSchemeVelocityBC(Scheme):
-    """
-
-    There are three schemes
-
-    1. GRAY
-    2. GTVF
-    3. ETVF
-
-    ETVF scheme in particular has 2 PST techniques
-
-    1. SUN2019
-    2. IPST
-
-
-    Using the following commands one can use these schemes
-
-    1. GRAY
-
-    python file_name.py --no-volume-correction --no-uhat --no-shear-tvf-correction --pst gray -d filename_pst_gray_output
-
-    2. GTVF
-
-    python file_name.py --no-volume-correction --uhat --no-shear-tvf-correction --pst gtvf -d filename_pst_gtvf_output
-
-    3. ETVF
-
-    python file_name.py --volume-correction --no-uhat --shear-tvf-correction --pst $(sun2019 or ipst) -d filename_etvf_pst_$(sun2019_or_ipst)_output
-
-
-    ipst has additional arguments such as `ipst_max_iterations`, this can be
-    changed using command line arguments
-
-
-    # Note
-
-    Additionally one can go for EDAC option
-
-    python file_name.py --edac --surface-p-zero $(rest_of_the_arguments)
-
-    """
-    def __init__(self, solids, boundaries, dim, pb, edac_nu, mach_no,
-                 hdx, ipst_max_iterations=10, ipst_min_iterations=0,
-                 ipst_tolerance=0.2, ipst_interval=1, use_uhat_velgrad=False,
-                 use_uhat_cont=False, artificial_vis_alpha=1.0,
-                 artificial_vis_beta=0.0, artificial_stress_eps=0.3,
-                 continuity_tvf_correction=False,
-                 shear_stress_tvf_correction=False, kernel_choice="1",
-                 stiff_eos=False, gamma=7., pst="sun2019",
-                 gx=0., gy=0., gz=0.):
-        self.solids = solids
-        if boundaries is None:
-            self.boundaries = []
-        else:
-            self.boundaries = boundaries
-
-        self.dim = dim
-
-        # TODO: if the kernel is adaptive this will fail
-        self.hdx = hdx
-
-        # for Monaghan stress
-        self.artificial_stress_eps = artificial_stress_eps
-
-        # TODO: kernel_fac will change with kernel. This should change
-        self.kernel_choice = "1"
-        self.kernel = QuinticSpline
-        self.kernel_factor = 2
-
-        self.use_uhat_cont = use_uhat_cont
-        self.use_uhat_velgrad = use_uhat_velgrad
-
-        self.pb = pb
-
-        self.no_boundaries = len(self.boundaries)
-
-        self.artificial_vis_alpha = artificial_vis_alpha
-        self.artificial_vis_beta = artificial_vis_beta
-
-        self.continuity_tvf_correction = continuity_tvf_correction
-        self.shear_stress_tvf_correction = shear_stress_tvf_correction
-
-        self.edac_nu = edac_nu
-        self.surf_p_zero = True
-        self.edac = False
-
-        self.pst = pst
-
-        # attributes for P Sun 2019 PST technique
-        self.mach_no = mach_no
-
-        # attributes for IPST technique
-        self.ipst_max_iterations = ipst_max_iterations
-        self.ipst_min_iterations = ipst_min_iterations
-        self.ipst_tolerance = ipst_tolerance
-        self.ipst_interval = ipst_interval
-
-        self.debug = False
-
-        self.stiff_eos = stiff_eos
-        self.gamma = gamma
-
-        # boundary conditions
-        self.adami_velocity_extrapolate = False
-        self.no_slip = False
-        self.free_slip = False
-
-        self.gx = gx
-        self.gy = gy
-        self.gz = gz
-
-        self.solver = None
-
-        self.attributes_changed()
-
-    def add_user_options(self, group):
-        add_bool_argument(
-            group, 'surf-p-zero', dest='surf_p_zero', default=True,
-            help='Make the surface pressure and acceleration to be zero')
-
-        add_bool_argument(group, 'uhat-cont', dest='use_uhat_cont',
-                          default=False,
-                          help='Use Uhat in continuity equation')
-
-        add_bool_argument(group, 'uhat-velgrad', dest='use_uhat_velgrad',
-                          default=False,
-                          help='Use Uhat in velocity gradient computation')
-
-        group.add_argument("--artificial-vis-alpha", action="store",
-                           dest="artificial_vis_alpha", default=1.0,
-                           type=float,
-                           help="Artificial viscosity coefficients")
-
-        group.add_argument("--artificial-vis-beta", action="store",
-                           dest="artificial_vis_beta", default=1.0, type=float,
-                           help="Artificial viscosity coefficients, beta")
-
-        add_bool_argument(
-            group, 'continuity-tvf-correction',
-            dest='continuity_tvf_correction', default=True,
-            help='Add the extra continuty term arriving due to TVF')
-
-        add_bool_argument(
-            group, 'shear-stress-tvf-correction',
-            dest='shear_stress_tvf_correction', default=True,
-            help='Add the extra shear stress rate term arriving due to TVF')
-
-        add_bool_argument(group, 'edac', dest='edac', default=True,
-                          help='Use pressure evolution equation EDAC')
-
-        add_bool_argument(group, 'adami-velocity-extrapolate',
-                          dest='adami_velocity_extrapolate', default=False,
-                          help='Use adami velocity extrapolation')
-
-        add_bool_argument(group, 'no-slip', dest='no_slip', default=False,
-                          help='No slip bc')
-
-        add_bool_argument(group, 'free-slip', dest='free_slip', default=False,
-                          help='Free slip bc')
-
-        choices = ['sun2019', 'ipst', 'gray', 'gtvf', 'none']
-        group.add_argument(
-            "--pst", action="store", dest='pst', default="sun2019",
-            choices=choices,
-            help="Specify what PST to use (one of %s)." % choices)
-
-        group.add_argument("--ipst-max-iterations", action="store",
-                           dest="ipst_max_iterations", default=10, type=int,
-                           help="Max iterations of IPST")
-
-        group.add_argument("--ipst-min-iterations", action="store",
-                           dest="ipst_min_iterations", default=5, type=int,
-                           help="Min iterations of IPST")
-
-        group.add_argument("--ipst-interval", action="store",
-                           dest="ipst_interval", default=1, type=int,
-                           help="Frequency at which IPST is to be done")
-
-        group.add_argument("--ipst-tolerance", action="store", type=float,
-                           dest="ipst_tolerance", default=None,
-                           help="Tolerance limit of IPST")
-
-        add_bool_argument(group, 'debug', dest='debug', default=False,
-                          help='Check if the IPST converged')
-
-        choices = ["1", "2", "3", "4", "5", "6", "7", "8"]
-        group.add_argument(
-            "--kernel-choice", action="store", dest='kernel_choice',
-            default="1", choices=choices,
-            help="""Specify what kernel to use (one of %s).
-                           1. QuinticSpline
-                           2. WendlandQuintic
-                           3. CubicSpline
-                           4. WendlandQuinticC4
-                           5. Gaussian
-                           6. SuperGaussian
-                           7. Gaussian
-                           8. Gaussian""" % choices)
-
-        add_bool_argument(group, 'stiff-eos', dest='stiff_eos', default=False,
-                          help='use stiff equation of state')
-
-    def consume_user_options(self, options):
-        _vars = [
-            'surf_p_zero', 'use_uhat_cont', 'use_uhat_velgrad',
-            'artificial_vis_alpha', 'shear_stress_tvf_correction', 'edac',
-            'pst', 'debug', 'ipst_max_iterations', 'ipst_tolerance',
-            'ipst_interval', 'kernel_choice', 'stiff_eos',
-            'continuity_tvf_correction', 'adami_velocity_extrapolate',
-            'no_slip', 'free_slip'
-        ]
-        data = dict((var, self._smart_getattr(options, var)) for var in _vars)
-        self.configure(**data)
-
-    def attributes_changed(self):
-        if self.kernel_choice == "1":
-            self.kernel = QuinticSpline
-            self.kernel_factor = 3
-        elif self.kernel_choice == "2":
-            self.kernel = WendlandQuintic
-            self.kernel_factor = 2
-        elif self.kernel_choice == "3":
-            self.kernel = CubicSpline
-            self.kernel_factor = 2
-        elif self.kernel_choice == "4":
-            self.kernel = WendlandQuinticC4
-            self.kernel_factor = 2
-            self.h = self.h / self.hdx * 2.0
-        elif self.kernel_choice == "5":
-            self.kernel = Gaussian
-            self.kernel_factor = 3
-        elif self.kernel_choice == "6":
-            self.kernel = SuperGaussian
-            self.kernel_factor = 3
-
-    def check_ipst_time(self, t, dt):
-        if int(t / dt) % self.ipst_interval == 0:
-            return True
-        else:
-            return False
-
-    def get_equations(self):
-        # from fluids import (SetWallVelocityFreeSlip, ContinuitySolidEquation,
-        #                     ContinuitySolidEquationGTVF,
-        #                     ContinuitySolidEquationETVFCorrection)
-
-        from pysph.sph.equation import Group, MultiStageEquations
-        from pysph.sph.basic_equations import (ContinuityEquation,
-                                               MonaghanArtificialViscosity,
-                                               VelocityGradient3D,
-                                               VelocityGradient2D)
-        from pysph.sph.solid_mech.basic import (IsothermalEOS,
-                                                HookesDeviatoricStressRate,
-                                                MonaghanArtificialStress)
-
-        stage1 = []
-        g1 = []
-        all = list(set(self.solids + self.boundaries))
-
-        # ------------------------
-        # stage 1 equations starts
-        # =================================== #
-        # solid velocity extrapolation ends
-        # =================================== #
-        # tmp = []
-        # if self.adami_velocity_extrapolate is True:
-        #     if self.no_slip is True:
-        #         if len(self.boundaries) > 0:
-        #             for boundary in self.boundaries:
-        #                 tmp.append(
-        #                     SetWallVelocity(dest=boundary,
-        #                                     sources=self.solids))
-
-        #     if self.free_slip is True:
-        #         if len(self.boundary) > 0:
-        #             for boundary in self.boundaries:
-        #                 tmp.append(
-        #                     SetWallVelocityFreeSlip(dest=boundary,
-        #                                             sources=self.solids))
-        #     stage1.append(Group(equations=tmp))
-        # =================================== #
-        # solid velocity extrapolation ends
-        # =================================== #
-
-        for solid in self.solids:
-            if self.use_uhat_cont is True:
-                g1.append(ContinuityEquationUhat(dest=solid, sources=all))
-            else:
-                g1.append(ContinuityEquation(dest=solid, sources=all))
-
-            if self.continuity_tvf_correction is True:
-                g1.append(
-                    ContinuityEquationETVFCorrection(dest=solid, sources=all))
-
-            if self.use_uhat_velgrad is True:
-                if self.dim == 2:
-                    g1.append(VelocityGradient2DUhat(dest=solid, sources=all))
-                elif self.dim == 3:
-                    g1.append(VelocityGradient3DUhat(dest=solid, sources=all))
-            else:
-                if self.dim == 2:
-                    g1.append(VelocityGradient2D(dest=solid, sources=all))
-                elif self.dim == 3:
-                    g1.append(VelocityGradient3D(dest=solid, sources=all))
-
-            if self.shear_stress_tvf_correction is True:
-                g1.append(
-                    ComputeDivDeviatoricStressOuterVelocity(
-                        dest=solid, sources=all))
-
-                g1.append(ComputeDivVelocity(dest=solid, sources=all))
-
-            if self.pst == "gray":
-                g1.append(
-                    MonaghanArtificialStress(dest=solid, sources=None,
-                                             eps=self.artificial_stress_eps))
-
-        stage1.append(Group(equations=g1))
-
-        # --------------------
-        # solid equations
-        # --------------------
-        g2 = []
-        for solid in self.solids:
-            g2.append(HookesDeviatoricStressRate(dest=solid, sources=None))
-
-            if self.shear_stress_tvf_correction is True:
-                g2.append(
-                    HookesDeviatoricStressRateETVFCorrection(
-                        dest=solid, sources=None))
-        stage1.append(Group(equations=g2))
-
-        # edac pressure evolution equation
-        if self.edac is True:
-            gtmp = []
-            for solid in self.solids:
-                gtmp.append(
-                    EDACEquation(dest=solid, sources=all, nu=self.edac_nu))
-
-            stage1.append(Group(gtmp))
-
-        if self.surf_p_zero is True:
-            # -------------------
-            # find the surface particles whose pressure has to be zero
-            # -------------------
-            g4 = []
-            g5 = []
-            g6 = []
-            for pa in self.solids:
-                g4.append(ComputeNormalsEDAC(dest=pa, sources=all))
-                g5.append(SmoothNormalsEDAC(dest=pa, sources=all))
-                g6.append(
-                    IdentifyBoundaryParticleCosAngleEDAC(dest=pa, sources=all))
-
-            stage1.append(Group(equations=g4))
-            stage1.append(Group(equations=g5))
-            stage1.append(Group(equations=g6))
-
-        # ------------------------
-        # stage 2 equations starts
-        # ------------------------
-
-        stage2 = []
-        g1 = []
-        g2 = []
-        g3 = []
-        g4 = []
-
-        if self.pst in ["sun2019", "ipst"]:
-            for solid in self.solids:
-                g1.append(
-                    SetHIJForInsideParticles(dest=solid, sources=[solid],
-                                             kernel_factor=self.kernel_factor))
-            stage2.append(Group(g1))
-
-        if self.edac is False:
-            if self.pst in ["gray", "ipst", "sun2019"]:
-                for solid in self.solids:
-                    if self.stiff_eos is True:
-                        g2.append(
-                            StiffEOS(solid, sources=None, gamma=self.gamma))
-                    else:
-                        g2.append(IsothermalEOS(solid, sources=None))
-
-            elif self.pst == "gtvf":
-                for solid in self.solids:
-                    g2.append(GTVFEOS(solid, sources=None))
-
-            if len(g2) > 0:
-                stage2.append(Group(g2))
-        else:
-            if self.pst == "gtvf":
-                for solid in self.solids:
-                    g2.append(GTVFSetP0(solid, sources=None))
-
-                stage2.append(Group(g2))
-
-        # make the acceleration of pressure and pressure of boundary
-        # particles zero
-        if self.surf_p_zero is True:
-            g2_tmp = []
-            for pa in self.solids:
-                g2_tmp.append(
-                    MakeSurfaceParticlesPressureApZeroEDACUpdated(
-                        dest=pa, sources=None))
-
-            stage2.append(Group(equations=g2_tmp))
-
-        # -------------------
-        # boundary conditions
-        # -------------------
-        for boundary in self.boundaries:
-            if self.free_slip is True:
-                g3.append(
-                    AdamiBoundaryConditionExtrapolateFreeSlip(
-                        dest=boundary, sources=self.solids))
-            else:
-                g3.append(
-                    AdamiBoundaryConditionExtrapolateNoSlip(
-                        dest=boundary, sources=self.solids,
-                        gx=self.gx, gy=self.gy, gz=self.gz
-                    ))
-        if len(g3) > 0:
-            stage2.append(Group(g3))
-
-        # -------------------
-        # solve momentum equation for solid
-        # -------------------
-        g4 = []
-        for solid in self.solids:
-            # add only if there is some positive value
-            if self.artificial_vis_alpha > 0. or self.artificial_vis_beta > 0.:
-                g4.append(
-                    MonaghanArtificialViscosity(
-                        dest=solid, sources=all,
-                        alpha=self.artificial_vis_alpha,
-                        beta=self.artificial_vis_beta))
-
-            g4.append(MomentumEquationSolids(dest=solid, sources=all))
-
-            if self.pst == "sun2019":
-                g4.append(
-                    ComputeAuHatETVFSun2019Solid(
-                        dest=solid, sources=[solid] + self.boundaries,
-                        mach_no=self.mach_no))
-            elif self.pst == "gtvf":
-                g4.append(
-                    ComputeAuHatGTVF(dest=solid,
-                                     sources=[solid] + self.boundaries))
-
-            elif self.pst == "gray":
-                g4.append(
-                    MonaghanArtificialStressCorrection(dest=solid,
-                                                       sources=[solid]))
-
-        stage2.append(Group(g4))
-
-        # this PST is handled separately
-        if self.pst == "ipst":
-            g5 = []
-            g6 = []
-            g7 = []
-            g8 = []
-
-            # make auhat zero before computation of ipst force
-            eqns = []
-            for solid in self.solids:
-                eqns.append(MakeAuhatZero(dest=solid, sources=None))
-
-            stage2.append(Group(eqns))
-
-            for solid in self.solids:
-                g5.append(
-                    SavePositionsIPSTBeforeMoving(dest=solid, sources=None))
-
-                # these two has to be in the iterative group and the nnps has to
-                # be updated
-                # ---------------------------------------
-                g6.append(
-                    AdjustPositionIPST(dest=solid,
-                                       sources=[solid] + self.boundaries,
-                                       u_max=self.u_max))
-
-                g7.append(
-                    CheckUniformityIPST(dest=solid,
-                                        sources=[solid] + self.boundaries,
-                                        debug=self.debug))
-                # ---------------------------------------
-
-                g8.append(ComputeAuhatETVFIPST(dest=solid, sources=None))
-                g8.append(ResetParticlePositionsIPST(dest=solid, sources=None))
-
-            stage2.append(Group(g5, condition=self.check_ipst_time))
-
-            # this is the iterative group
-            stage2.append(
-                Group(equations=[Group(equations=g6),
-                                 Group(equations=g7)], iterate=True,
-                      max_iterations=self.ipst_max_iterations,
-                      min_iterations=self.ipst_min_iterations,
-                      condition=self.check_ipst_time))
-
-            stage2.append(Group(g8, condition=self.check_ipst_time))
-
-        g9 = []
-        for solid in self.solids:
-            g9.append(AddGravityToStructure(dest=solid, sources=None,
-                                            gx=self.gx,
-                                            gy=self.gy,
-                                            gz=self.gz))
-
-        stage2.append(Group(equations=g9))
-
-        return MultiStageEquations([stage1, stage2])
-
-    def configure_solver(self, kernel=None, integrator_cls=None,
-                         extra_steppers=None, **kw):
-        """TODO: Fix the integrator of the boundary. If it is solve_tau then solve for
-        deviatoric stress or else no integrator has to be used
-        """
-        kernel = self.kernel(dim=self.dim)
-
-        steppers = {}
-        if extra_steppers is not None:
-            steppers.update(extra_steppers)
-
-        from pysph.sph.wc.gtvf import GTVFIntegrator
-
-        cls = integrator_cls if integrator_cls is not None else GTVFIntegrator
-
-        if self.edac is True:
-            step_cls = SolidMechStepEDAC
-        else:
-            step_cls = SolidMechStep
-
-        for name in self.solids:
-            if name not in steppers:
-                steppers[name] = step_cls()
-
-        # for name in self.boundaries:
-        #     if name not in steppers:
-        #         steppers[name] = step_cls()
-
-        integrator = cls(**steppers)
-
-        from pysph.solver.solver import Solver
-        self.solver = Solver(dim=self.dim, integrator=integrator,
-                             kernel=kernel, **kw)
-
-    def setup_properties(self, particles, clean=True):
-        from pysph.examples.solid_mech.impact import add_properties
-
-        pas = dict([(p.name, p) for p in particles])
-
-        for solid in self.solids:
-            # we expect the solid to have Young's modulus, Poisson ration as
-            # given
-            pa = pas[solid]
-
-            # add the properties that are used by all the schemes
-            add_properties(pa, 'cs', 'v00', 'v01', 'v02', 'v10', 'v11', 'v12',
-                           'v20', 'v21', 'v22', 's00', 's01', 's02', 's11',
-                           's12', 's22', 'as00', 'as01', 'as02', 'as11',
-                           'as12', 'as22', 'arho', 'au', 'av', 'aw')
-
-            # this will change
-            kernel = self.kernel(dim=2)
-            wdeltap = kernel.kernel(rij=pa.spacing0[0], h=pa.h[0])
-            pa.add_constant('wdeltap', wdeltap)
-
-            # set the shear modulus G
-            G = get_shear_modulus(pa.E[0], pa.nu[0])
-            pa.add_constant('G', G)
-
-            # set the speed of sound
-            cs = np.ones_like(pa.x) * get_speed_of_sound(
-                pa.E[0], pa.nu[0], pa.rho_ref[0])
-            pa.cs[:] = cs[:]
-
-            c0_ref = get_speed_of_sound(pa.E[0], pa.nu[0], pa.rho_ref[0])
-            pa.add_constant('c0_ref', c0_ref)
-
-            # auhat properties are needed for gtvf, etvf but not for gray. But
-            # for the compatability with the integrator we will add
-            add_properties(pa, 'auhat', 'avhat', 'awhat', 'uhat', 'vhat',
-                           'what')
-
-            add_properties(pa, 'sigma00', 'sigma01', 'sigma02', 'sigma11',
-                           'sigma12', 'sigma22')
-
-            # output arrays
-            pa.add_output_arrays(['sigma00', 'sigma01', 'sigma11'])
-
-            # now add properties specific to the scheme and PST
-            if self.pst == "gray":
-                add_properties(pa, 'r02', 'r11', 'r22', 'r01', 'r00', 'r12')
-
-            if self.pst == "gtvf":
-                add_properties(pa, 'p0')
-
-                if 'p_ref' not in pa.constants:
-                    pa.add_constant('p_ref', 0.)
-
-                if 'b_mod' not in pa.constants:
-                    pa.add_constant('b_mod', 0.)
-
-                pa.b_mod[0] = get_bulk_mod(pa.G[0], pa.nu[0])
-                pa.p_ref[0] = pa.b_mod[0]
-
-            if self.pst == "sun2019" or "ipst":
-                # for boundary identification and for sun2019 pst
-                pa.add_property('normal', stride=3)
-                pa.add_property('normal_tmp', stride=3)
-                pa.add_property('normal_norm')
-
-                # check for boundary particle
-                pa.add_property('is_boundary', type='int')
-
-                # used to set the particles near the boundary
-                pa.add_property('h_b')
-
-            # if the PST is IPST
-            if self.pst == "ipst":
-                setup_ipst(pa, self.kernel)
-
-            # for edac
-            if self.edac == True:
-                add_properties(pa, 'ap')
-
-            if self.surf_p_zero == True:
-                pa.add_property('edac_normal', stride=3)
-                pa.add_property('edac_normal_tmp', stride=3)
-                pa.add_property('edac_normal_norm')
-
-                # check for edac boundary particle
-                pa.add_property('edac_is_boundary', type='int')
-
-                pa.add_property('ap')
-
-            # add the corrected shear stress rate
-            if self.shear_stress_tvf_correction == True:
-                add_properties(pa, 'div_vel')
-                add_properties(pa, 's11v_y', 's01v_y', 's11w_z', 's00w_z',
-                               's12w_z', 's12v_y', 's02u_x', 's22w_z',
-                               's11u_x', 's22u_x', 's00u_x', 's02w_z',
-                               's02v_y', 's00v_y', 's01w_z', 's22v_y',
-                               's12u_x', 's01u_x')
-
-            # update the h if using wendlandquinticc4
-            if self.kernel_choice == "4":
-                pa.h[:] = pa.h[:] / self.hdx * 2.
-
-            pa.add_output_arrays(['p'])
-
-        for boundary in self.boundaries:
-            pa = pas[boundary]
-            pa.add_property('wij')
-
-            # for adami boundary condition
-
-            add_properties(pa, 'ug', 'vg', 'wg', 'uf', 'vf', 'wf', 's00',
-                           's01', 's02', 's11', 's12', 's22', 'cs', 'uhat',
-                           'vhat', 'what')
-
-            cs = np.ones_like(pa.x) * get_speed_of_sound(
-                pa.E[0], pa.nu[0], pa.rho_ref[0])
-            pa.cs[:] = cs[:]
-
-            if self.continuity_tvf_correction == True:
-                pa.add_property('ughat')
-                pa.add_property('vghat')
-                pa.add_property('wghat')
-
-            if self.surf_p_zero == True:
-                pa.add_property('edac_normal', stride=3)
-                pa.add_property('edac_normal_tmp', stride=3)
-                pa.add_property('edac_normal_norm')
-
-            # now add properties specific to the scheme and PST
-            if self.pst == "gray":
-                add_properties(pa, 'r02', 'r11', 'r22', 'r01', 'r00', 'r12')
-
-            if self.pst == "gtvf":
-                add_properties(pa, 'uhat', 'vhat', 'what')
-
-            if self.kernel_choice == "4":
-                pa.h[:] = pa.h[:] / self.hdx * 2.
-
-    def get_solver(self):
-        return self.solver
