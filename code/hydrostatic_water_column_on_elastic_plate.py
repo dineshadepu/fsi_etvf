@@ -94,58 +94,18 @@ def get_elastic_plate_with_support(beam_length, beam_height, boundary_layers,
 
 class ElasticGate(Application):
     def add_user_options(self, group):
-        group.add_argument("--rho", action="store", type=float, dest="rho",
-                           default=7800.,
-                           help="Density of the particle (Defaults to 7800.)")
-
-        group.add_argument(
-            "--Vf", action="store", type=float, dest="Vf", default=0.05,
-            help="Velocity of the plate (Vf) (Defaults to 0.05)")
-
-        group.add_argument("--length", action="store", type=float,
-                           dest="length", default=0.1,
-                           help="Length of the plate")
-
-        group.add_argument("--height", action="store", type=float,
-                           dest="height", default=0.01,
-                           help="height of the plate")
-
-        group.add_argument("--deflection", action="store", type=float,
-                           dest="deflection", default=1e-4,
-                           help="Deflection of the plate")
-
         group.add_argument("--N", action="store", type=int, dest="N",
-                           default=10,
+                           default=5,
                            help="No of particles in the height direction")
-
-        group.add_argument("--final-force-time", action="store", type=float,
-                           dest="final_force_time", default=1e-3,
-                           help="Total time taken to apply the external load")
-
-        group.add_argument("--damping-c", action="store", type=float,
-                           dest="damping_c", default=0.1,
-                           help="Damping constant in damping force")
-
-        group.add_argument("--material", action="store", type=str,
-                           dest="material", default="steel",
-                           help="Material of the plate")
-
-        # add_bool_argument(group, 'shepard', dest='use_shepard_correction',
-        #                   default=False, help='Use shepard correction')
-
-        # add_bool_argument(group, 'bonet', dest='use_bonet_correction',
-        #                   default=False, help='Use Bonet and Lok correction')
-
-        # add_bool_argument(group, 'kgf', dest='use_kgf_correction',
-        #                   default=False, help='Use KGF correction')
 
     def consume_user_options(self):
         self.dim = 2
+        self.N = self.options.N
 
         # ================================================
         # properties related to the only fluids
         # ================================================
-        spacing = 0.05 / 5.
+        spacing = 0.05 / self.N
         self.hdx = 1.0
 
         self.fluid_length = 1.0
@@ -468,7 +428,8 @@ class ElasticGate(Application):
         # solver_data = data['solver_data']
         arrays = data['arrays']
         pa = arrays['gate']
-        y_0 = pa.y[61]
+        index = 300
+        y_0 = pa.y[index]
 
         files = files[0::1]
         # print(len(files))
@@ -476,23 +437,17 @@ class ElasticGate(Application):
         for sd, gate in iter_output(files, 'gate'):
             _t = sd['t']
             t.append(_t)
-            amplitude.append((gate.y[61] - y_0) * 1)
+            amplitude.append((gate.y[index] - y_0) * 1)
 
         # matplotlib.use('Agg')
 
         import os
         from matplotlib import pyplot as plt
 
-        # res = os.path.join(self.output_dir, "results.npz")
-        # np.savez(res, t=t, amplitude=amplitude)
-
-        # gtvf data
-        # data = np.loadtxt('./oscillating_plate.csv', delimiter=',')
-        # t_gtvf, amplitude_gtvf = data[:, 0], data[:, 1]
+        res = os.path.join(self.output_dir, "results.npz")
+        np.savez(res, t=t, amplitude=amplitude)
 
         plt.clf()
-
-        # plt.plot(t_gtvf, amplitude_gtvf, "s-", label='GTVF Paper')
         plt.plot(t, amplitude, "-", label='Simulated')
 
         # exact solution

@@ -504,7 +504,8 @@ class BeamUnderUDF(Application):
         from pysph.solver.utils import iter_output
         from pysph.solver.utils import get_files, load
 
-        files = get_files(fname)
+        info = self.read_info(fname)
+        files = self.output_files
 
         idx = 290
 

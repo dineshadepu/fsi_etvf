@@ -392,10 +392,6 @@ class ElasticDamBreak2D(Problem):
 
         cmd = 'python code/elastic_dam_break_2d.py' + backend
 
-        # length = [1., 2., 3., 4.]
-        # height = [0.1]
-        # pfreq = 500
-
         # Base case info
         self.case_info = {
             'etvf': (dict(
@@ -421,27 +417,34 @@ class ElasticDamBreak2D(Problem):
         self.make_output_dir()
 
 
-class FSIBM1(Problem):
+class HydroStaticWaterColumnOnElasticPlate(Problem):
     def get_name(self):
-        return 'fsi_bm_1'
+        return 'hydrostatic_water_column_on_elastic_plate'
 
     def setup(self):
         get_path = self.input_path
 
-        cmd = 'python code/fsi_bm_1.py' + backend
-
-        # length = [1., 2., 3., 4.]
-        # height = [0.1]
-        # pfreq = 500
+        cmd = 'python code/hydrostatic_water_column_on_elastic_plate.py' + backend
 
         # Base case info
         self.case_info = {
-            'etvf_gate_rho_500_with_gravity': (dict(
-                scheme='etvf',
-                pst='sun2019',
-                gate_rho=500,
+            'etvf_N_5': (dict(
+                scheme='substep',
                 structure_gravity=None,
-                pfreq=300), 'ETVF'),
+                N=5,
+                pfreq=300), 'ETVF N 5'),
+
+            'etvf_N_8': (dict(
+                scheme='substep',
+                structure_gravity=None,
+                N=8,
+                pfreq=300), 'ETVF N 8'),
+
+            'etvf_N_12': (dict(
+                scheme='substep',
+                structure_gravity=None,
+                N=12,
+                pfreq=300), 'ETVF N 12')
         }
 
         self.cases = [
@@ -456,155 +459,70 @@ class FSIBM1(Problem):
         self.make_output_dir()
 
 
-class FSITest1Bar(Problem):
+class KhayyerElasticPlateUnderUDLFree(Problem):
     def get_name(self):
-        return 'fsi_test_1'
+        return 'khayyer_2021_clamped_elastic_plate_under_a_uniformly_distributed_load'
 
     def setup(self):
         get_path = self.input_path
 
-        cmd = 'python code/fsi_test_1.py' + backend
-
-        # length = [1., 2., 3., 4.]
-        # height = [0.1]
-        # pfreq = 500
+        cmd = 'python code/khayyer_2021_clamped_elastic_plate_under_a_uniformly_distributed_load.py' + backend
 
         # Base case info
         self.case_info = {
-            'etvf_gate_rho_500_gy_1_E_1e6_nu_0_35': (dict(
-                scheme='etvf',
-                pst='sun2019',
-                structure='bar',
-                gate_rho=500,
-                gate_E=1e6,
-                gate_nu=0.35,
-                alpha=0.1,
-                gy=-1.,
-                structure_gravity=None,
-                tf=70,
-                pfreq=100), 'ETVF Rho 500 gy 1 E 1e6 nu 0.35'),
+            'free_wall_pst_N_9': (dict(
+                no_clamp=None,
+                pst="sun2019",
+                no_distributed=None,
+                gradual_force=None,
+                gradual_force_time=0.1,
+                wall_pst=None,
+                solid_stress_bc=None,
+                solid_velocity_bc=None,
+                artificial_vis_alpha=1.,
+                artificial_vis_beta=1.,
+                N=9,
+                tf=0.3,
+                pfreq=500), 'Free Wall PST N=9'),
+        }
 
-            'etvf_gate_rho_1000_gy_1_E_1e6_nu_0_35': (dict(
-                scheme='etvf',
-                pst='sun2019',
-                structure='bar',
-                gate_rho=1000,
-                gate_E=1e6,
-                gate_nu=0.35,
-                alpha=0.1,
-                gy=-1.,
-                structure_gravity=None,
-                tf=70,
-                pfreq=100), 'ETVF Rho 1000 gy 1 E 1e6 nu 0.35'),
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
 
-            'etvf_gate_rho_1500_gy_1_E_1e6_nu_0_35': (dict(
-                scheme='etvf',
-                pst='sun2019',
-                structure='bar',
-                gate_rho=1500,
-                gate_E=1e6,
-                gate_nu=0.35,
-                alpha=0.1,
-                gy=-1.,
-                structure_gravity=None,
-                tf=70,
-                pfreq=100), 'ETVF Rho 1500 gy 1 E 1e6 nu 0.35'),
+    def run(self):
+        self.make_output_dir()
 
-            # ===================
-            # Variation in gy
-            # ===================
-            'etvf_gate_rho_500_gy_10_E_1e6_nu_0_35': (dict(
-                scheme='etvf',
-                pst='sun2019',
-                structure='bar',
-                gate_rho=500,
-                gate_E=1e6,
-                gate_nu=0.35,
-                alpha=0.1,
-                gy=-10.,
-                structure_gravity=None,
-                tf=70,
-                pfreq=100), 'ETVF Rho 500 gy 10 E 1e6 nu 0.35'),
 
-            # 'etvf_gate_rho_500_gy_100_E_1e6_nu_0_35': (dict(
-            #     scheme='etvf',
-            #     pst='sun2019',
-            #     structure='bar',
-            #     gate_rho=500,
-            #     gate_E=1e6,
-            #     gate_nu=0.35,
-            #     alpha=0.1,
-            #     gy=-100.,
-            #     structure_gravity=None,
-            #     tf=70,
-            #     pfreq=100), 'ETVF Rho 500 gy 100 E 1e6 nu 0.35'),
-            # =====================
-            # Variation in gy ends
-            # =====================
+class KhayyerElasticPlateUnderUDLClamped(Problem):
+    def get_name(self):
+        return 'khayyer_2021_clamped_elastic_plate_under_a_uniformly_distributed_load'
 
-            # =====================
-            # Variation in E
-            # =====================
-            'etvf_gate_rho_500_gy_1_E_1e8_nu_0_35': (dict(
-                scheme='etvf',
-                pst='sun2019',
-                structure='bar',
-                gate_rho=500,
-                gate_E=1e8,
-                gate_nu=0.35,
-                alpha=0.1,
-                gy=-1.,
-                structure_gravity=None,
-                tf=70,
-                pfreq=100), 'ETVF Rho 500 gy 1 E 1e8 nu 0.35'),
+    def setup(self):
+        get_path = self.input_path
 
-            'etvf_gate_rho_500_gy_1_E_1e4_nu_0_35': (dict(
-                scheme='etvf',
-                pst='sun2019',
-                structure='bar',
-                gate_rho=500,
-                gate_E=1e4,
-                gate_nu=0.35,
-                alpha=0.1,
-                gy=-1.,
-                structure_gravity=None,
-                tf=70,
-                pfreq=100), 'ETVF Rho 500 gy 1 E 1e4 nu 0.35'),
-            # =====================
-            # Variation in E ends
-            # =====================
+        cmd = 'python code/khayyer_2021_clamped_elastic_plate_under_a_uniformly_distributed_load.py' + backend
 
-            # =====================
-            # Variation in nu
-            # =====================
-            'etvf_gate_rho_500_gy_1_E_1e6_nu_0_4': (dict(
-                scheme='etvf',
-                pst='sun2019',
-                structure='bar',
-                gate_rho=500,
-                gate_E=1e6,
-                gate_nu=0.4,
-                alpha=0.1,
-                gy=-1.,
-                structure_gravity=None,
-                tf=70,
-                pfreq=100), 'ETVF Rho 500 gy 1 E 1e6 nu 0.4'),
-
-            'etvf_gate_rho_500_gy_1_E_1e6_nu_0_3': (dict(
-                scheme='etvf',
-                pst='sun2019',
-                structure='bar',
-                gate_rho=500,
-                gate_E=1e6,
-                gate_nu=0.3,
-                alpha=0.1,
-                gy=-1.,
-                structure_gravity=None,
-                tf=70,
-                pfreq=100), 'ETVF Rho 500 gy 1 E 1e6 nu 0.3'),
-            # =====================
-            # Variation in nu ends
-            # =====================
+        # Base case info
+        self.case_info = {
+            'free_wall_pst_N_9': (dict(
+                clamp=None,
+                pst="sun2019",
+                no_distributed=None,
+                gradual_force=None,
+                gradual_force_time=0.1,
+                wall_pst=None,
+                solid_stress_bc=None,
+                solid_velocity_bc=None,
+                artificial_vis_alpha=1.,
+                artificial_vis_beta=1.,
+                N=9,
+                tf=0.3,
+                pfreq=500), 'Free Wall PST N=9'),
         }
 
         self.cases = [
@@ -624,17 +542,11 @@ if __name__ == '__main__':
     matplotlib.use('pdf')
 
     PROBLEMS = [
-        ElasticDamBreak2D, OscillatingPlateTurek, FSIBM1, FSITest1Bar
+        HydroStaticWaterColumnOnElasticPlate, KhayyerElasticPlateUnderUDL
     ]
 
     automator = Automator(simulation_dir='outputs',
                           output_dir=os.path.join('manuscript', 'figures'),
                           all_problems=PROBLEMS)
-
-    # task = FileCommandTask(
-    #   'latexmk manuscript/paper.tex -pdf -outdir=manuscript',
-    #   ['manuscript/paper.pdf']
-    # )
-    # automator.add_task(task, name='pdf', post_proc=True)
 
     automator.run()
