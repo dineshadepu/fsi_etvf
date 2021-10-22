@@ -15,11 +15,11 @@ from pysph.tools.sph_evaluator import SPHEvaluator
 from pysph.base.kernels import (CubicSpline, WendlandQuintic, QuinticSpline,
                                 WendlandQuinticC4, Gaussian, SuperGaussian)
 
-from solid_mech import (ComputeAuHatETVF, ComputeAuHatETVFSun2019,
-                        SavePositionsIPSTBeforeMoving, AdjustPositionIPST,
-                        CheckUniformityIPST, ComputeAuhatETVFIPST,
-                        ResetParticlePositionsIPST, EDACEquation, setup_ipst,
-                        SetHIJForInsideParticles)
+# from solid_mech import (ComputeAuHatETVFSun2019,
+#                         SavePositionsIPSTBeforeMoving, AdjustPositionIPST,
+#                         CheckUniformityIPST, ComputeAuhatETVFIPST,
+#                         ResetParticlePositionsIPST, EDACEquation, setup_ipst,
+#                         SetHIJForInsideParticles)
 
 from pysph.sph.wc.edac import (SolidWallPressureBC)
 
@@ -32,10 +32,9 @@ from boundary_particles import (ComputeNormals, SmoothNormals,
 from common import EDACIntegrator
 from pysph.examples.solid_mech.impact import add_properties
 from pysph.sph.wc.linalg import mat_vec_mult
-from solid_mech import (ContinuityEquationETVFCorrection)
 
 
-class SetWallVelocityFreeSlipAndNoSlip(Equation):
+class FluidSetWallVelocityUFreeSlipAndNoSlip(Equation):
     def initialize(self, d_idx, d_uf, d_vf, d_wf, d_wij):
         d_uf[d_idx] = 0.0
         d_vf[d_idx] = 0.0
@@ -99,80 +98,7 @@ class SetWallVelocityFreeSlipAndNoSlip(Equation):
             d_wgns[d_idx] -= vn*d_normal[idx3+2]
 
 
-class SetWallVelocityNoSlip(Equation):
-    def initialize(self, d_idx, d_uf, d_vf, d_wf, d_wij):
-        d_uf[d_idx] = 0.0
-        d_vf[d_idx] = 0.0
-        d_wf[d_idx] = 0.0
-        d_wij[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, d_uf, d_vf, d_wf, s_u, s_v, s_w, d_wij, WIJ):
-        # normalisation factor is different from 'V' as the particles
-        # near the boundary do not have full kernel support
-        d_wij[d_idx] += WIJ
-
-        # sum in Eq. (22)
-        # this will be normalized in post loop
-        d_uf[d_idx] += s_u[s_idx] * WIJ
-        d_vf[d_idx] += s_v[s_idx] * WIJ
-        d_wf[d_idx] += s_w[s_idx] * WIJ
-
-    def post_loop(self, d_uf, d_vf, d_wf, d_wij, d_idx, d_ugns, d_vgns, d_wgns,
-                  d_u, d_v, d_w):
-        # calculation is done only for the relevant boundary particles.
-        # d_wij (and d_uf) is 0 for particles sufficiently away from the
-        # solid-fluid interface
-        if d_wij[d_idx] > 1e-12:
-            d_uf[d_idx] /= d_wij[d_idx]
-            d_vf[d_idx] /= d_wij[d_idx]
-            d_wf[d_idx] /= d_wij[d_idx]
-
-        # Dummy velocities at the ghost points using Eq. (23),
-        # d_u, d_v, d_w are the prescribed wall velocities.
-        d_ugns[d_idx] = 2 * d_u[d_idx] - d_uf[d_idx]
-        d_vgns[d_idx] = 2 * d_v[d_idx] - d_vf[d_idx]
-        d_wgns[d_idx] = 2 * d_w[d_idx] - d_wf[d_idx]
-
-
-class SetWallVelocityUhatNoSlip(Equation):
-    def initialize(self, d_idx, d_uf, d_vf, d_wf, d_wij):
-        d_uf[d_idx] = 0.0
-        d_vf[d_idx] = 0.0
-        d_wf[d_idx] = 0.0
-        d_wij[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, d_uf, d_vf, d_wf, s_uhat, s_vhat, s_what,
-             d_wij, WIJ):
-
-        # normalisation factor is different from 'V' as the particles
-        # near the boundary do not have full kernel support
-        d_wij[d_idx] += WIJ
-
-        # sum in Eq. (22)
-        # this will be normalized in post loop
-        d_uf[d_idx] += s_uhat[s_idx] * WIJ
-        d_vf[d_idx] += s_vhat[s_idx] * WIJ
-        d_wf[d_idx] += s_what[s_idx] * WIJ
-
-    def post_loop(self, d_uf, d_vf, d_wf, d_wij, d_idx, d_ughatns, d_vghatns,
-                  d_wghatns, d_u, d_v, d_w):
-
-        # calculation is done only for the relevant boundary particles.
-        # d_wij (and d_uf) is 0 for particles sufficiently away from the
-        # solid-fluid interface
-        if d_wij[d_idx] > 1e-12:
-            d_uf[d_idx] /= d_wij[d_idx]
-            d_vf[d_idx] /= d_wij[d_idx]
-            d_wf[d_idx] /= d_wij[d_idx]
-
-        # Dummy velocities at the ghost points using Eq. (23),
-        # d_u, d_v, d_w are the prescribed wall velocities.
-        d_ughatns[d_idx] = 2 * d_u[d_idx] - d_uf[d_idx]
-        d_vghatns[d_idx] = 2 * d_v[d_idx] - d_vf[d_idx]
-        d_wghatns[d_idx] = 2 * d_w[d_idx] - d_wf[d_idx]
-
-
-class SetWallVelocityUhatFreeSlipAndNoSlip(Equation):
+class FluidSetWallVelocityUhatFreeSlipAndNoSlip(Equation):
     def initialize(self, d_idx, d_uf, d_vf, d_wf, d_wij):
         d_uf[d_idx] = 0.0
         d_vf[d_idx] = 0.0
@@ -239,93 +165,147 @@ class SetWallVelocityUhatFreeSlipAndNoSlip(Equation):
             d_wghatns[d_idx] -= vn*d_normal[idx3+2]
 
 
-class ContinuitySolidEquationGTVF(Equation):
+class FluidContinuityEquationGTVF(Equation):
     def initialize(self, d_arho, d_idx):
         d_arho[d_idx] = 0.0
 
     def loop(self, d_idx, s_idx, s_m, d_rho, s_rho, d_uhat, d_vhat, d_what,
-             s_ughatfs, s_vghatfs, s_wghatfs, s_ughatns, s_vghatns, s_wghatns,
-             d_arho, DWIJ):
-        uhatij = d_uhat[d_idx] - s_ughatfs[s_idx]
-        vhatij = d_vhat[d_idx] - s_vghatfs[s_idx]
-        whatij = d_what[d_idx] - s_wghatfs[s_idx]
-
-        # uhatij = d_uhat[d_idx] - s_ughatns[s_idx]
-        # vhatij = d_vhat[d_idx] - s_vghatns[s_idx]
-        # whatij = d_what[d_idx] - s_wghatns[s_idx]
+             s_uhat, s_vhat, s_what, d_arho, DWIJ):
+        uhatij = d_uhat[d_idx] - s_uhat[s_idx]
+        vhatij = d_vhat[d_idx] - s_vhat[s_idx]
+        whatij = d_what[d_idx] - s_what[s_idx]
 
         udotdij = DWIJ[0] * uhatij + DWIJ[1] * vhatij + DWIJ[2] * whatij
         fac = d_rho[d_idx] * s_m[s_idx] / s_rho[s_idx]
         d_arho[d_idx] += fac * udotdij
 
 
-class ContinuitySolidEquation(Equation):
-    def initialize(self, d_arho, d_idx):
-        d_arho[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, s_m, d_rho, s_rho, d_u, d_v, d_w, s_ug, s_vg,
-             s_wg, d_arho, DWIJ):
-        uhatij = d_u[d_idx] - s_ug[s_idx]
-        vhatij = d_v[d_idx] - s_vg[s_idx]
-        whatij = d_w[d_idx] - s_wg[s_idx]
-
-        udotdij = DWIJ[0] * uhatij + DWIJ[1] * vhatij + DWIJ[2] * whatij
-        fac = d_rho[d_idx] * s_m[s_idx] / s_rho[s_idx]
-        d_arho[d_idx] += fac * udotdij
-
-
-# class ContinuitySolidEquation(Equation):
-#     def initialize(self, d_arho, d_idx):
-#         d_arho[d_idx] = 0.0
-
-#     def loop(self, d_idx, s_idx, s_m, d_rho, s_rho, d_u, d_v, d_w,
-#              s_ug, s_vg, s_wg, d_arho, DWIJ):
-#         uhatij = d_u[d_idx] - s_ug[s_idx]
-#         vhatij = d_v[d_idx] - s_vg[s_idx]
-#         whatij = d_w[d_idx] - s_wg[s_idx]
-
-#         udotdij = DWIJ[0]*uhatij + DWIJ[1]*vhatij + DWIJ[2]*whatij
-#         fac = d_rho[d_idx] * s_m[s_idx] / s_rho[s_idx]
-#         d_arho[d_idx] += fac * udotdij
-
-
-class ContinuitySolidEquationETVFCorrection(Equation):
-    """
-    This is the additional term arriving in the new ETVF continuity equation
-    """
+class FluidContinuityEquationETVFCorrection(Equation):
     def loop(self, d_idx, d_arho, d_rho, d_u, d_v, d_w, d_uhat, d_vhat, d_what,
-             s_idx, s_rho, s_m, s_ugfs, s_vgfs, s_wgfs, s_ughatfs, s_vghatfs,
-             s_wghatfs, s_ugns, s_vgns, s_wgns, s_ughatns, s_vghatns,
-             s_wghatns, DWIJ):
-        # by using free ship boundary conditions
-        tmp0 = s_rho[s_idx] * (s_ughatfs[s_idx] - s_ugfs[s_idx]
-                               ) - d_rho[d_idx] * (d_uhat[d_idx] - d_u[d_idx])
+             s_idx, s_rho, s_m, s_u, s_v, s_w, s_uhat, s_vhat, s_what, DWIJ):
+        tmp0 = s_rho[s_idx] * (s_uhat[s_idx] - s_u[s_idx]) - d_rho[d_idx] * (
+            d_uhat[d_idx] - d_u[d_idx])
 
-        tmp1 = s_rho[s_idx] * (s_vghatfs[s_idx] - s_vgfs[s_idx]
-                               ) - d_rho[d_idx] * (d_vhat[d_idx] - d_v[d_idx])
+        tmp1 = s_rho[s_idx] * (s_vhat[s_idx] - s_v[s_idx]) - d_rho[d_idx] * (
+            d_vhat[d_idx] - d_v[d_idx])
 
-        tmp2 = s_rho[s_idx] * (s_wghatfs[s_idx] - s_wgfs[s_idx]
-                               ) - d_rho[d_idx] * (d_what[d_idx] - d_w[d_idx])
-
-        # # by using no ship boundary conditions
-        # tmp0 = s_rho[s_idx] * (s_ughatns[s_idx] - s_ugns[s_idx]
-        #                        ) - d_rho[d_idx] * (d_uhat[d_idx] - d_u[d_idx])
-
-        # tmp1 = s_rho[s_idx] * (s_vghatns[s_idx] - s_vgns[s_idx]
-        #                        ) - d_rho[d_idx] * (d_vhat[d_idx] - d_v[d_idx])
-
-        # tmp2 = s_rho[s_idx] * (s_wghatns[s_idx] - s_wgns[s_idx]
-        #                        ) - d_rho[d_idx] * (d_what[d_idx] - d_w[d_idx])
+        tmp2 = s_rho[s_idx] * (s_what[s_idx] - s_w[s_idx]) - d_rho[d_idx] * (
+            d_what[d_idx] - d_w[d_idx])
 
         vijdotdwij = (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
 
         d_arho[d_idx] += s_m[s_idx] / s_rho[s_idx] * vijdotdwij
 
 
-class EDACSolidEquation(Equation):
+class FluidContinuityEquationGTVFSolid(Equation):
+    def initialize(self, d_arho, d_idx):
+        d_arho[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, s_m, d_rho, s_rho, d_uhat, d_vhat, d_what,
+             s_ughatfs, s_vghatfs, s_wghatfs, d_arho, DWIJ):
+        uhatij = d_uhat[d_idx] - s_ughatfs[s_idx]
+        vhatij = d_vhat[d_idx] - s_vghatfs[s_idx]
+        whatij = d_what[d_idx] - s_wghatfs[s_idx]
+
+        udotdij = DWIJ[0] * uhatij + DWIJ[1] * vhatij + DWIJ[2] * whatij
+        fac = d_rho[d_idx] * s_m[s_idx] / s_rho[s_idx]
+        d_arho[d_idx] += fac * udotdij
+
+
+class FluidContinuityEquationETVFCorrectionSolid(Equation):
+    def loop(self, d_idx, d_arho, d_rho, d_u, d_v, d_w, d_uhat, d_vhat, d_what,
+             s_idx, s_rho, s_m, s_ugfs, s_vgfs, s_wgfs, s_ughatfs, s_vghatfs,
+             s_wghatfs, DWIJ):
+        tmp0 = s_rho[s_idx] * (s_ughatfs[s_idx] -
+                               s_ugfs[s_idx]) - d_rho[d_idx] * (
+                                   d_uhat[d_idx] - d_u[d_idx])
+
+        tmp1 = s_rho[s_idx] * (s_vghatfs[s_idx] -
+                               s_vgfs[s_idx]) - d_rho[d_idx] * (
+                                   d_vhat[d_idx] - d_v[d_idx])
+
+        tmp2 = s_rho[s_idx] * (s_wghatfs[s_idx] -
+                               s_wgfs[s_idx]) - d_rho[d_idx] * (
+                                   d_what[d_idx] - d_w[d_idx])
+
+        vijdotdwij = (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
+
+        d_arho[d_idx] += s_m[s_idx] / s_rho[s_idx] * vijdotdwij
+
+
+class FluidEDACEquation(Equation):
     def __init__(self, dest, sources, nu):
         self.nu = nu
-        super(EDACSolidEquation, self).__init__(dest, sources)
+        super(FluidEDACEquation, self).__init__(dest, sources)
+
+    def initialize(self, d_ap, d_idx):
+        d_ap[d_idx] = 0.0
+
+    def loop(self, d_idx, s_idx, d_p, d_rho, d_cs, d_u, d_v, d_w, d_uhat,
+             d_vhat, d_what, s_p, s_m, s_rho, d_ap, DWIJ, XIJ, s_uhat, s_vhat,
+             s_what, s_u, s_v, s_w, R2IJ, VIJ, EPS):
+        vhatij = declare('matrix(3)')
+        vhatij[0] = d_uhat[d_idx] - s_uhat[s_idx]
+        vhatij[1] = d_vhat[d_idx] - s_vhat[s_idx]
+        vhatij[2] = d_what[d_idx] - s_what[s_idx]
+
+        cs2 = d_cs[d_idx] * d_cs[d_idx]
+
+        rhoj1 = 1.0 / s_rho[s_idx]
+        Vj = s_m[s_idx] * rhoj1
+        rhoi = d_rho[d_idx]
+        pi = d_p[d_idx]
+        rhoj = s_rho[s_idx]
+        pj = s_p[s_idx]
+
+        vij_dot_dwij = -(VIJ[0] * DWIJ[0] + VIJ[1] * DWIJ[1] +
+                         VIJ[2] * DWIJ[2])
+
+        vhatij_dot_dwij = -(vhatij[0] * DWIJ[0] + vhatij[1] * DWIJ[1] +
+                            vhatij[2] * DWIJ[2])
+
+        # vhatij_dot_dwij = (VIJ[0]*DWIJ[0] + VIJ[1]*DWIJ[1] +
+        #                    VIJ[2]*DWIJ[2])
+
+        #######################################################
+        # first term on the rhs of Eq 23 of the current paper #
+        #######################################################
+        d_ap[d_idx] += (pi - rhoi * cs2) * Vj * vij_dot_dwij
+
+        #######################################################
+        # second term on the rhs of Eq 23 of the current paper #
+        #######################################################
+        d_ap[d_idx] += -pi * Vj * vhatij_dot_dwij
+
+        ########################################################
+        # third term on the rhs of Eq 19 of the current paper #
+        ########################################################
+        tmp0 = pj * (s_uhat[s_idx] - s_u[s_idx]) - pi * (d_uhat[d_idx] -
+                                                         d_u[d_idx])
+
+        tmp1 = pj * (s_vhat[s_idx] - s_v[s_idx]) - pi * (d_vhat[d_idx] -
+                                                         d_v[d_idx])
+
+        tmp2 = pj * (s_what[s_idx] - s_w[s_idx]) - pi * (d_what[d_idx] -
+                                                         d_w[d_idx])
+
+        tmpdotdwij = (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
+        d_ap[d_idx] += -Vj * tmpdotdwij
+
+        #######################################################
+        # fourth term on the rhs of Eq 19 of the current paper #
+        #######################################################
+        rhoij = d_rho[d_idx] + s_rho[s_idx]
+        # The viscous damping of pressure.
+        xijdotdwij = DWIJ[0] * XIJ[0] + DWIJ[1] * XIJ[1] + DWIJ[2] * XIJ[2]
+        tmp = Vj * 4 * xijdotdwij / (rhoij * (R2IJ + EPS))
+        d_ap[d_idx] += self.nu * tmp * (d_p[d_idx] - s_p[s_idx])
+
+
+class FluidEDACEquationSolid(Equation):
+    def __init__(self, dest, sources, nu):
+        self.nu = nu
+        super(FluidEDACEquationSolid, self).__init__(dest, sources)
 
     def initialize(self, d_ap, d_idx):
         d_ap[d_idx] = 0.0
@@ -509,7 +489,7 @@ class CheckUniformityIPSTFluidInternalFlow(Equation):
             return 1.0
 
 
-class MomentumEquationPressureGradient(Equation):
+class FluidMomentumEquationPressureGradient(Equation):
     def __init__(self, dest, sources, gx=0.0, gy=0.0, gz=0.0):
         self.gx = gx
         self.gy = gy
@@ -535,7 +515,33 @@ class MomentumEquationPressureGradient(Equation):
         d_aw[d_idx] += tmp * DWIJ[2]
 
 
-class MomentumEquationTVFDivergence(Equation):
+class FluidMomentumEquationPressureGradientRogersConnor(Equation):
+    def __init__(self, dest, sources, gx=0.0, gy=0.0, gz=0.0):
+        self.gx = gx
+        self.gy = gy
+        self.gz = gz
+        super().__init__(dest, sources)
+
+    def initialize(self, d_idx, d_au, d_av, d_aw):
+        d_au[d_idx] = self.gx
+        d_av[d_idx] = self.gy
+        d_aw[d_idx] = self.gz
+
+    def loop(self, d_rho, s_rho, d_idx, s_idx, d_p, s_p, s_m, d_au, d_av, d_aw,
+             DWIJ):
+        rhoi = d_rho[d_idx]
+        rhoj = s_rho[s_idx]
+
+        pij = (d_p[d_idx] + s_p[s_idx]) / (rhoi * rhoj)
+
+        tmp = -s_m[s_idx] * pij
+
+        d_au[d_idx] += tmp * DWIJ[0]
+        d_av[d_idx] += tmp * DWIJ[1]
+        d_aw[d_idx] += tmp * DWIJ[2]
+
+
+class FluidMomentumEquationTVFDivergence(Equation):
     def loop(self, d_rho, d_idx, s_idx, d_p, s_p, d_au, d_av, d_aw, d_u, d_v,
              d_w, d_uhat, d_vhat, d_what, s_rho, s_m, s_u, s_v, s_w, s_uhat,
              s_vhat, s_what, DWIJ):
@@ -544,25 +550,6 @@ class MomentumEquationTVFDivergence(Equation):
         tmp1 = (d_vhat[d_idx] - s_vhat[s_idx]) - (d_v[d_idx] - s_v[s_idx])
 
         tmp2 = (d_what[d_idx] - s_what[s_idx]) - (d_w[d_idx] - s_w[s_idx])
-
-        tmp = s_m[s_idx] / s_rho[s_idx]
-
-        tmp3 = tmp * (DWIJ[0] * tmp0 + DWIJ[1] * tmp1 + DWIJ[2] * tmp2)
-
-        d_au[d_idx] += d_u[d_idx] * tmp3
-        d_av[d_idx] += d_v[d_idx] * tmp3
-        d_aw[d_idx] += d_w[d_idx] * tmp3
-
-
-class MomentumEquationTVFDivergenceSolids(Equation):
-    def loop(self, d_rho, d_idx, s_idx, d_p, s_p, d_au, d_av, d_aw, d_u, d_v,
-             d_w, d_uhat, d_vhat, d_what, s_rho, s_m, s_ug, s_vg, s_wg,
-             s_ughat, s_vghat, s_wghat, DWIJ):
-        tmp0 = (d_uhat[d_idx] - s_ughat[s_idx]) - (d_u[d_idx] - s_ug[s_idx])
-
-        tmp1 = (d_vhat[d_idx] - s_vghat[s_idx]) - (d_v[d_idx] - s_vg[s_idx])
-
-        tmp2 = (d_what[d_idx] - s_wghat[s_idx]) - (d_w[d_idx] - s_wg[s_idx])
 
         tmp = s_m[s_idx] / s_rho[s_idx]
 
@@ -1403,7 +1390,7 @@ class ETVFScheme(Scheme):
         eqs = []
         for fluid in self.fluids:
             eqs.append(
-                MomentumEquationPressureGradient(dest=fluid, sources=all,
+                FluidMomentumEquationPressureGradient(dest=fluid, sources=all,
                                                  gx=self.gx, gy=self.gy,
                                                  gz=self.gz), )
 

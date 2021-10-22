@@ -15,11 +15,11 @@ from pysph.solver.utils import load, get_files
 matplotlib.use('pdf')
 
 matplotlib.use('pdf')
-n_core = free_cores()
-n_thread = 2 * free_cores()
+# n_core = free_cores()
+# n_thread = 2 * free_cores()
 
-# n_core = 4
-# n_thread = 8
+n_core = 16
+n_thread = 32
 backend = ' --openmp '
 
 
@@ -75,6 +75,120 @@ def get_files_at_given_times_from_log(files, times, logfile):
                     time_count += 1
                 file_count += 1
     return result
+
+
+class Hwang2014StaticCantileverBeam(Problem):
+    def get_name(self):
+        return 'hwang_2014_static_cantilever_beam'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/hwang_2014_static_cantilever_beam.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'n_5': (dict(
+                pst='sun2019',
+                solid_stress_bc=None,
+                solid_velocity_bc=None,
+                no_edac=None,
+                continuity_correction=None,
+                no_clamp=None,
+                artificial_vis_alpha=2.0,
+                N=5,
+                distributed=None,
+                gradual_force=None,
+                gradual_force_time=0.1,
+                no_wall_pst=None,
+                no_two_layer=None,
+                no_sandwich=None,
+                pfreq=500,
+                tf=0.3,
+                ), 'N 5 '),
+
+            'n_10': (dict(
+                pst='sun2019',
+                solid_stress_bc=None,
+                solid_velocity_bc=None,
+                no_edac=None,
+                continuity_correction=None,
+                no_clamp=None,
+                artificial_vis_alpha=2.0,
+                N=10,
+                distributed=None,
+                gradual_force=None,
+                gradual_force_time=0.1,
+                no_wall_pst=None,
+                pfreq=500,
+                tf=0.3,
+                ), 'N 10'),
+
+            # 'n_10_rk2': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     solid_velocity_bc=None,
+            #     no_edac=None,
+            #     continuity_correction=None,
+            #     no_uhat_vgrad=None,
+            #     integrator="rk2",
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=10,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=700,
+            #     tf=0.3,
+            #     ), 'N 10 RK2'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        amplitude_analytical = data['n_5']['amplitude_analytical']
+        t_analytical = data['n_5']['t_analytical']
+        amplitude_khayyer = data['n_5']['amplitude_khayyer']
+        t_khayyer = data['n_5']['t_analytical']
+
+        plt.plot(t_analytical, amplitude_analytical, '--', label='Analytical')
+        plt.plot(t_khayyer, amplitude_khayyer, '-', label='Khayyer')
+
+        for name in self.case_info:
+            t = data[name]['t_ctvf']
+            amplitude_ctvf = data[name]['amplitude_ctvf']
+
+            plt.plot(t, amplitude_ctvf, label=self.case_info[name][1])
+            # if name == 'n_5':
+            #     t = data[name]['t_ctvf']
+            #     amplitude_ctvf = data[name]['amplitude_ctvf']
+
+            #     plt.plot(t, amplitude_ctvf, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('Y - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('homogenous_unclamped_plate_udl.pdf'))
+        plt.clf()
+        plt.close()
 
 
 class OscillatingPlateTurek(Problem):
@@ -383,85 +497,11 @@ class OscillatingPlateTurek(Problem):
         plt.close()
 
 
-class ElasticDamBreak2D(Problem):
+
+
+class Khayyer2021UDLHomogeneous(Problem):
     def get_name(self):
-        return 'elastic_dam_break_2d'
-
-    def setup(self):
-        get_path = self.input_path
-
-        cmd = 'python code/elastic_dam_break_2d.py' + backend
-
-        # Base case info
-        self.case_info = {
-            'etvf': (dict(
-                scheme='etvf',
-                pfreq=300), 'ETVF'),
-
-            'wcsph': (dict(
-                scheme='wcsph',
-                tf=0.4,
-                cache_nnps=None,
-                pfreq=300), 'ETVF'),
-        }
-
-        self.cases = [
-            Simulation(get_path(name), cmd,
-                       job_info=dict(n_core=n_core,
-                                     n_thread=n_thread), cache_nnps=None,
-                       **scheme_opts(self.case_info[name][0]))
-            for name in self.case_info
-        ]
-
-    def run(self):
-        self.make_output_dir()
-
-
-class HydroStaticWaterColumnOnElasticPlate(Problem):
-    def get_name(self):
-        return 'hydrostatic_water_column_on_elastic_plate'
-
-    def setup(self):
-        get_path = self.input_path
-
-        cmd = 'python code/hydrostatic_water_column_on_elastic_plate.py' + backend
-
-        # Base case info
-        self.case_info = {
-            'etvf_N_5': (dict(
-                scheme='substep',
-                structure_gravity=None,
-                N=5,
-                pfreq=300), 'ETVF N 5'),
-
-            'etvf_N_8': (dict(
-                scheme='substep',
-                structure_gravity=None,
-                N=8,
-                pfreq=300), 'ETVF N 8'),
-
-            'etvf_N_12': (dict(
-                scheme='substep',
-                structure_gravity=None,
-                N=12,
-                pfreq=300), 'ETVF N 12')
-        }
-
-        self.cases = [
-            Simulation(get_path(name), cmd,
-                       job_info=dict(n_core=n_core,
-                                     n_thread=n_thread), cache_nnps=None,
-                       **scheme_opts(self.case_info[name][0]))
-            for name in self.case_info
-        ]
-
-    def run(self):
-        self.make_output_dir()
-
-
-class KhayyerElasticPlateUnderUDLFree(Problem):
-    def get_name(self):
-        return 'khayyer_2021_clamped_elastic_plate_under_a_uniformly_distributed_load'
+        return 'khayyer_2021_udl_homogeneous'
 
     def setup(self):
         get_path = self.input_path
@@ -470,20 +510,848 @@ class KhayyerElasticPlateUnderUDLFree(Problem):
 
         # Base case info
         self.case_info = {
-            'free_wall_pst_N_9': (dict(
+            'n_5': (dict(
+                pst='sun2019',
+                solid_stress_bc=None,
+                no_solid_velocity_bc=None,
+                no_edac=None,
                 no_clamp=None,
-                pst="sun2019",
-                no_distributed=None,
+                artificial_vis_alpha=2.0,
+                N=5,
+                distributed=None,
                 gradual_force=None,
                 gradual_force_time=0.1,
-                wall_pst=None,
+                no_wall_pst=None,
+                no_two_layer=None,
+                no_sandwich=None,
+                pfreq=500,
+                tf=1.,
+                ), 'N 5'),
+
+            'damping_n_5': (dict(
+                pst='sun2019',
                 solid_stress_bc=None,
-                solid_velocity_bc=None,
-                artificial_vis_alpha=1.,
-                artificial_vis_beta=1.,
-                N=9,
+                no_solid_velocity_bc=None,
+                no_edac=None,
+                damping=None,
+                no_clamp=None,
+                artificial_vis_alpha=2.0,
+                N=5,
+                distributed=None,
+                gradual_force=None,
+                gradual_force_time=0.1,
+                no_wall_pst=None,
+                no_two_layer=None,
+                no_sandwich=None,
+                pfreq=500,
                 tf=0.3,
-                pfreq=500), 'Free Wall PST N=9'),
+                ), 'Damping N 5'),
+
+            'damping_n_10': (dict(
+                pst='sun2019',
+                solid_stress_bc=None,
+                no_solid_velocity_bc=None,
+                no_edac=None,
+                damping=None,
+                no_clamp=None,
+                artificial_vis_alpha=2.0,
+                N=10,
+                distributed=None,
+                gradual_force=None,
+                gradual_force_time=0.1,
+                no_wall_pst=None,
+                no_two_layer=None,
+                no_sandwich=None,
+                pfreq=500,
+                tf=2.,
+                ), 'Damping N 10'),
+
+            'damping_n_20': (dict(
+                pst='sun2019',
+                solid_stress_bc=None,
+                no_solid_velocity_bc=None,
+                no_edac=None,
+                damping=None,
+                no_clamp=None,
+                artificial_vis_alpha=2.0,
+                N=20,
+                distributed=None,
+                gradual_force=None,
+                gradual_force_time=0.1,
+                no_wall_pst=None,
+                no_two_layer=None,
+                no_sandwich=None,
+                pfreq=500,
+                tf=1.0,
+                ), 'Damping N 20'),
+
+            # 'n_10': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=10,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'N 10'),
+
+            # 'n_20': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=20,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'N 20'),
+
+            # 'n_5_new_visc': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=5,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'N 5 New visc'),
+
+            # 'n_10_new_visc': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_continuity_correction=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=10,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=700,
+            #     tf=0.3,
+            #     ), 'N 10 New visc no correction'),
+
+            # 'n_10_new_visc_all': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     solid_velocity_bc=None,
+            #     no_edac=None,
+            #     continuity_correction=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=10,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=700,
+            #     tf=0.3,
+            #     ), 'N 10 New visc'),
+
+            # 'n_10_modified_visc': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     solid_velocity_bc=None,
+            #     no_edac=None,
+            #     continuity_correction=None,
+            #     modified_artificial_viscosity=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=10,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=700,
+            #     tf=0.3,
+            #     ), 'N 10 Modified visc'),
+
+            # 'n_10_rk2': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     solid_velocity_bc=None,
+            #     no_edac=None,
+            #     continuity_correction=None,
+            #     no_uhat_vgrad=None,
+            #     integrator="rk2",
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=10,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=700,
+            #     tf=0.3,
+            #     ), 'N 10 RK2'),
+
+            # 'n_10_uhat': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     solid_velocity_bc=None,
+            #     no_edac=None,
+            #     continuity_correction=None,
+            #     uhat_vgrad=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=10,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=700,
+            #     tf=0.3,
+            #     ), 'N 10 uhat'),
+
+            # 'n_20_new_visc': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=20,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=700,
+            #     tf=0.3,
+            #     ), 'N 20 New visc'),
+
+            # 'gray_n_5': (dict(
+            #     scheme='gray',
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=5,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'N 5 Gray'),
+
+            # 'clamp_gray_n_5': (dict(
+            #     scheme='gray',
+            #     pst='sun2019',
+            #     no_solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=5,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'N 5 Gray Clamp'),
+
+            # 'no_clamp_gray_n_10': (dict(
+            #     scheme='gray',
+            #     pst='sun2019',
+            #     no_solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=10,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=800,
+            #     tf=0.3,
+            #     ), 'N 10 Gray no clamp'),
+
+            # 'n_10': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=10,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'N 10'),
+
+            # 'n_20': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=20,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'N 20'),
+
+            # 'n_50': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=50,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'N 50'),
+
+            # 'clamped_n_5': (dict(
+            #     pst='sun2019',
+            #     solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_edac=None,
+            #     clamp=None,
+            #     artificial_vis_alpha=2.0,
+            #     N=5,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'Clamped N 5'),
+
+            # 'no_wall_pst_clamped_n_5': (dict(
+            #     pst='sun2019',
+            #     no_solid_stress_bc=None,
+            #     no_solid_velocity_bc=None,
+            #     no_edac=None,
+            #     no_clamp=None,
+            #     artificial_vis_alpha=1.0,
+            #     N=5,
+            #     distributed=None,
+            #     gradual_force=None,
+            #     gradual_force_time=0.1,
+            #     no_wall_pst=None,
+            #     no_two_layer=None,
+            #     no_sandwich=None,
+            #     pfreq=500,
+            #     tf=0.3,
+            #     ), 'No wall pst Clamped N 5'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        amplitude_khayyer = data['n_5']['amplitude_khayyer']
+        t_khayyer = data['n_5']['t_analytical']
+
+        plt.plot(t_khayyer, amplitude_khayyer, '-', label='Khayyer')
+
+        max_t = 0.
+        for name in self.case_info:
+            t = data[name]['t_ctvf']
+            max_t = max(max_t, max(t))
+            amplitude_ctvf = data[name]['amplitude_ctvf']
+
+            plt.plot(t, amplitude_ctvf, label=self.case_info[name][1])
+            # if name == 'n_5':
+            #     t = data[name]['t_ctvf']
+            #     amplitude_ctvf = data[name]['amplitude_ctvf']
+
+            #     plt.plot(t, amplitude_ctvf, label=self.case_info[name][1])
+
+        amplitude_analytical = data['n_5']['amplitude_analytical'][0]
+        t_analytical = max_t
+        t_analytical = np.linspace(0., t_analytical, 1000)
+        amplitude_analytical = np.ones_like(t_analytical) * data['n_5']['amplitude_analytical'][0]
+        plt.plot(t_analytical, amplitude_analytical, '--', label='Analytical')
+
+        plt.xlabel('time')
+        plt.ylabel('Y - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('homogenous_unclamped_plate_udl.pdf'))
+        plt.clf()
+        plt.close()
+
+
+class Khayyer2021HydrostaticWaterColumnOnCompositeElasticPlate(Problem):
+    """
+    Pertains to Figure 14 (a)
+    """
+    def get_name(self):
+        return 'khayyer_2021_hydrostatic_water_column_on_composite_elastic_plate'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/khayyer_2021_hydrostatic_water_column_on_composite_elastic_plate.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'ctvf_5e_3': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                alpha_fluid=1.0,
+                d0=5e-3,
+                pfreq=500,
+                tf=0.5,
+                ), 'CTVF d0=5e-3'),
+
+            'ctvf': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                alpha_fluid=1.0,
+                d0=1e-3,
+                pfreq=500,
+                tf=0.5,
+                ), 'CTVF d0=1e-3'),
+
+            'ctvf_5e_4': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                alpha_fluid=1.0,
+                d0=5e-4,
+                pfreq=500,
+                tf=0.5,
+                ), 'CTVF d0=5e-4'),
+
+            # 'ctvf_25e_4': (dict(
+            #     scheme='substep',
+            #     no_rogers_eqns=None,
+            #     alpha_fluid=1.0,
+            #     d0=2.5 * 1e-4,
+            #     pfreq=700,
+            #     tf=0.5,
+            #     ), 'CTVF d0=2.5e-4'),
+
+            'gray_5e_3': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                wcsph_structures=None,
+                alpha_fluid=1.0,
+                d0=5e-3,
+                pfreq=500,
+                tf=0.5,
+                ), 'Gray d0=5e-3'),
+
+            'gray_1e_3': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                wcsph_structures=None,
+                alpha_fluid=1.0,
+                d0=1e-3,
+                pfreq=500,
+                tf=0.5,
+                ), 'Gray d0=1e-3'),
+
+            'gray_5e_4': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                wcsph_structures=None,
+                alpha_fluid=1.0,
+                d0=5e-4,
+                pfreq=500,
+                tf=0.5,
+                ), 'Gray d0=5e-4'),
+
+            'wcsph_5e_3': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                wcsph_fluids=None,
+                alpha_fluid=1.0,
+                d0=5e-3,
+                pfreq=500,
+                tf=0.5,
+                ), 'WCSPH d0=5e-3'),
+
+            'wcsph_1e_3': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                wcsph_fluids=None,
+                alpha_fluid=1.0,
+                d0=1e-3,
+                pfreq=500,
+                tf=0.5,
+                ), 'WCSPH d0=1e-3'),
+
+            'wcsph_5e_4': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                wcsph_fluids=None,
+                alpha_fluid=1.0,
+                d0=5e-4,
+                pfreq=500,
+                tf=0.5,
+                ), 'WCSPH d0=5e-4'),
+
+            'wcsph_gray_5e_3': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                wcsph_fluids=None,
+                wcsph_structures=None,
+                alpha_fluid=1.0,
+                d0=5e-3,
+                pfreq=500,
+                tf=0.5,
+                ), 'WCSPH Gray d0=5e-3'),
+
+            'wcsph_gray_1e_3': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                wcsph_fluids=None,
+                wcsph_structures=None,
+                alpha_fluid=1.0,
+                d0=1e-3,
+                pfreq=500,
+                tf=0.5,
+                ), 'WCSPH Gray d0=1e-3'),
+
+            'wcsph_gray_5e_4': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                wcsph_fluids=None,
+                wcsph_structures=None,
+                alpha_fluid=1.0,
+                d0=5e-4,
+                pfreq=500,
+                tf=0.5,
+                ), 'WCSPH Gray d0=5e-4'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        t_analytical = data['ctvf']['t_analytical']
+        y_analytical = data['ctvf']['amplitude_analytical']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.plot(t_analytical, y_analytical, "-", label='Analytical')
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            y_ctvf = data[name]['amplitude_ctvf']
+
+            plt.plot(t_ctvf, y_ctvf, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('y - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('y_amplitude.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+
+
+class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
+    """
+    Pertains to Figure 14 (a)
+    """
+    def get_name(self):
+        return 'ng_2020_hydrostatic_water_column_on_elastic_plate'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/ng_2020_hydrostatic_water_column_on_elastic_plate.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'ctvf': (dict(
+                scheme='substep',
+                pfreq=500,
+                tf=1.,
+                no_rogers_eqns=None,
+                d0=1e-2,
+                ), 'CTVF'),
+
+            # 'rogers': (dict(
+            #     scheme='ctvf',
+            #     pfreq=500,
+            #     tf=1.,
+            #     rogers_eqns=None
+            #     ), 'Rogers Scheme'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        t_analytical = data['ctvf']['t_analytical']
+        y_analytical = data['ctvf']['y_analytical']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.plot(t_analytical, y_analytical, "-", label='Analytical')
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            y_ctvf = data[name]['y_ctvf']
+
+            plt.plot(t_ctvf, y_ctvf, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('y - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('y_amplitude.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+
+
+class Ng2020ElasticDamBreak(Problem):
+    """
+    Pertains to Figure 14 (a)
+    """
+    def get_name(self):
+        return 'ng_2020_elastic_dam_break'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/ng_2020_elastic_dam_break.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'ctvf': (dict(
+                scheme='ctvf',
+                pfreq=500,
+                tf=0.4,
+                no_rogers_eqns=None
+                ), 'CTVF'),
+
+            # 'rogers': (dict(
+            #     scheme='ctvf',
+            #     pfreq=500,
+            #     tf=0.4,
+            #     rogers_eqns=None
+            #     ), 'Rogers Scheme'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        txant = data['ctvf']['txant']
+        xdant = data['ctvf']['xdant']
+        txkha = data['ctvf']['txkha']
+        xdkha = data['ctvf']['xdkha']
+        txyan = data['ctvf']['txyan']
+        xdyan = data['ctvf']['xdyan']
+        txng = data['ctvf']['txng']
+        xdng = data['ctvf']['xdng']
+        txwcsph = data['ctvf']['txwcsph']
+        xdwcsph = data['ctvf']['xdwcsph']
+
+        tyant = data['ctvf']['tyant']
+        ydant = data['ctvf']['ydant']
+        tykha = data['ctvf']['tykha']
+        ydkha = data['ctvf']['ydkha']
+        tyyan = data['ctvf']['tyyan']
+        ydyan = data['ctvf']['ydyan']
+        tyng = data['ctvf']['tyng']
+        ydng = data['ctvf']['ydng']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.plot(txant, xdant, "o", label='Antoci 2008, Experiment')
+        plt.plot(txkha, xdkha, "^", label='Khayyer 2018, ISPH-SPH')
+        plt.plot(txyan, xdyan, "+", label='Yang 2012, SPH-FEM')
+        plt.plot(txng, xdng, "v", label='Ng 2020, SPH-VCPM')
+        plt.plot(txwcsph, xdwcsph, "*", label='WCSPH PySPH')
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            x_ctvf = data[name]['x_ctvf']
+
+            plt.plot(t_ctvf, x_ctvf, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('x - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('x_amplitude.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+
+        # ==================================
+        # Plot y amplitude
+        # ==================================
+        plt.plot(tyant, ydant, "o", label='Antoci 2008, Experiment')
+        plt.plot(tykha, ydkha, "^", label='Khayyer 2018, ISPH-SPH')
+        plt.plot(tyyan, ydyan, "+", label='Yang 2012, SPH-FEM')
+        plt.plot(tyng, ydng, "v", label='Ng 2020, SPH-VCPM')
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            y_ctvf = data[name]['y_ctvf']
+
+            plt.plot(t_ctvf, y_ctvf, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('y - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('y_amplitude.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot y amplitude
+        # ==================================
+
+
+class Ng2020DamBreakWithAnElasticStructureDB2(Problem):
+    def get_name(self):
+        return 'ng_2020_dam_breaking_flow_impacting_an_elastic_plate'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/ng_2020_dam_breaking_flow_impacting_an_elastic_plate.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'ctvf': (dict(
+                scheme='ctvf',
+                pfreq=200,
+                case="db2",
+                tf=0.003,
+                no_rogers_eqns=None
+                ), 'CTVF'),
+
+            # 'rogers': (dict(
+            #     scheme='ctvf',
+            #     pfreq=500,
+            #     tf=0.4,
+            #     rogers_eqns=None
+            #     ), 'Rogers Scheme'),
         }
 
         self.cases = [
@@ -498,31 +1366,267 @@ class KhayyerElasticPlateUnderUDLFree(Problem):
         self.make_output_dir()
 
 
-class KhayyerElasticPlateUnderUDLClamped(Problem):
+class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
+    """
+    Pertains to Figure 14 (a)
+    """
     def get_name(self):
-        return 'khayyer_2021_clamped_elastic_plate_under_a_uniformly_distributed_load'
+        return 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge'
 
     def setup(self):
         get_path = self.input_path
 
-        cmd = 'python code/khayyer_2021_clamped_elastic_plate_under_a_uniformly_distributed_load.py' + backend
+        cmd = 'python code/zhang_2021_high_speed_water_entry_of_an_elastic_wedge.py' + backend
 
         # Base case info
         self.case_info = {
-            'free_wall_pst_N_9': (dict(
-                clamp=None,
-                pst="sun2019",
-                no_distributed=None,
+            'ctvf': (dict(
+                scheme='ctvf',
+                pfreq=200,
+                tf=0.003,
+                no_rogers_eqns=None
+                ), 'CTVF'),
+
+            # 'rogers': (dict(
+            #     scheme='ctvf',
+            #     pfreq=500,
+            #     tf=0.4,
+            #     rogers_eqns=None
+            #     ), 'Rogers Scheme'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
+class Hwang2014RollingTankWithEmbeddedHangingElasticBeam(Problem):
+    def get_name(self):
+        return 'hwang_2014_rolling_tank_with_embedded_hanging_elastic_beam'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/hwang_2014_rolling_tank_with_embedded_hanging_elastic_beam.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'ctvf': (dict(
+                scheme='ctvf',
+                pfreq=500,
+                tf=1.,
+                no_rogers_eqns=None
+                ), 'CTVF'),
+
+            # 'rogers': (dict(
+            #     scheme='ctvf',
+            #     pfreq=500,
+            #     tf=0.4,
+            #     rogers_eqns=None
+            #     ), 'Rogers Scheme'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
+class Sun2021Appendix1FloatingBody(Problem):
+    """
+    Pertains to Figure 14 (a)
+    """
+    def get_name(self):
+        return 'sun_2021_appendix_1_floating_body'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/sun_2021_appendix_1_floating_body.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'ctvf_5e_3': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                alpha_fluid=1.0,
+                d0=5. * 1e-3,
+                gate_rho=500.,
+                pfreq=1000,
+                tf=20.0,
+                ), 'CTVF d0=5e-3'),
+
+            # 'ctvf_2.5e_3': (dict(
+            #     scheme='substep',
+            #     no_rogers_eqns=None,
+            #     alpha_fluid=1.0,
+            #     d0=5. * 1e-3,
+            #     pfreq=500,
+            #     tf=20.0,
+            #     ), 'CTVF d0=2.5e-3'),
+
+
+            # 'ctvf_1e_3': (dict(
+            #     scheme='substep',
+            #     no_rogers_eqns=None,
+            #     alpha_fluid=1.0,
+            #     d0=1e-3,
+            #     pfreq=500,
+            #     tf=20.0
+            #     ), 'CTVF d0=1e-3'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        # ==================================
+        # Plot y amplitude
+        # ==================================
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            y_ctvf = data[name]['amplitude_ctvf']
+
+            plt.plot(t_ctvf, y_ctvf, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('y - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('y_amplitude.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot y amplitude
+        # ==================================
+
+
+class Sun2021Appendix1FixedBody(Problem):
+    """
+    Pertains to Figure 14 (a)
+    """
+    def get_name(self):
+        return 'sun_2021_appendix_1_fixed_body'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/sun_2021_appendix_1_fixed_body.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'ctvf_5e_3': (dict(
+                scheme='substep',
+                no_rogers_eqns=None,
+                alpha_fluid=1.0,
+                d0=5. * 1e-3,
+                gate_rho=500.,
+                pfreq=1000,
+                tf=20.0,
+                ), 'CTVF d0=5e-3'),
+
+            # 'ctvf_2.5e_3': (dict(
+            #     scheme='substep',
+            #     no_rogers_eqns=None,
+            #     alpha_fluid=1.0,
+            #     d0=5. * 1e-3,
+            #     pfreq=500,
+            #     tf=20.0,
+            #     ), 'CTVF d0=2.5e-3'),
+
+
+            # 'ctvf_1e_3': (dict(
+            #     scheme='substep',
+            #     no_rogers_eqns=None,
+            #     alpha_fluid=1.0,
+            #     d0=1e-3,
+            #     pfreq=500,
+            #     tf=20.0
+            #     ), 'CTVF d0=1e-3'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        # ==================================
+        # Plot y amplitude
+        # ==================================
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            y_ctvf = data[name]['amplitude_ctvf']
+
+            plt.plot(t_ctvf, y_ctvf, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('y - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('y_amplitude.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot y amplitude
+        # ==================================
+
+
+class Nasar2019NonLinearQuasiStaticDefectionOf2DCantilieverBeam(Problem):
+    def get_name(self):
+        return 'nasar_2019_non_linear_quasi_static_deflection_of_2d_cantilever_beam'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/nasar_2019_non_linear_quasi_static_deflection_of_2d_cantilever_beam.py' + backend
+
+        # Base case info
+        self.case_info = {
+            'n_40': (dict(
+                Nx=40,
                 gradual_force=None,
                 gradual_force_time=0.1,
-                wall_pst=None,
-                solid_stress_bc=None,
-                solid_velocity_bc=None,
-                artificial_vis_alpha=1.,
-                artificial_vis_beta=1.,
-                N=9,
+                pfreq=500,
                 tf=0.3,
-                pfreq=500), 'Free Wall PST N=9'),
+                ), 'N 40'),
         }
 
         self.cases = [
@@ -542,11 +1646,27 @@ if __name__ == '__main__':
     matplotlib.use('pdf')
 
     PROBLEMS = [
-        HydroStaticWaterColumnOnElasticPlate, KhayyerElasticPlateUnderUDL
+        Khayyer2021UDLHomogeneous,
+        Ng2020HydrostaticWaterColumnOnElasticPlate,
+        Ng2020ElasticDamBreak,
+        Ng2020DamBreakWithAnElasticStructureDB2,
+        Zhang2021HighSpeedWaterEntryOfAnElasticWedge,
+        Hwang2014RollingTankWithEmbeddedHangingElasticBeam,
+        Khayyer2021HydrostaticWaterColumnOnCompositeElasticPlate,
+        Sun2021Appendix1FloatingBody,
+        Sun2021Appendix1FixedBody,
+        # vector dem cases
+        Nasar2019NonLinearQuasiStaticDefectionOf2DCantilieverBeam
     ]
 
     automator = Automator(simulation_dir='outputs',
                           output_dir=os.path.join('manuscript', 'figures'),
                           all_problems=PROBLEMS)
+
+    # task = FileCommandTask(
+    #   'latexmk manuscript/paper.tex -pdf -outdir=manuscript',
+    #   ['manuscript/paper.pdf']
+    # )
+    # automator.add_task(task, name='pdf', post_proc=True)
 
     automator.run()

@@ -1,4 +1,5 @@
-"""A 2d hydrostatic tank.
+"""A coupled Smoothed Particle Hydrodynamics-Volume Compensated Particle Method
+(SPH-VCPM) for Fluid Structure Interaction (FSI) modelling
 """
 
 import numpy as np
@@ -19,16 +20,24 @@ from pysph.examples.solid_mech.impact import add_properties
 #                                                                create_sphere)
 from pysph.tools.geometry import get_2d_block, rotate
 
-from fsi_coupling import FSIScheme, FSIGTVFScheme
-from fsi_substepping import FSISubSteppingScheme, FSISubSteppingWCSPHScheme
-from fsi_coupling_wcsph import FSIWCSPHScheme
-from fsi_coupling_rogers import FSIWCSPHSchemeRogers
+from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
 
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
 
 from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
+
+
+def find_displacement_index(pa):
+    x = pa.x
+    y = pa.y
+    min_y = min(y)
+    max_x = max(x)
+    index = (pa.x == max_x) & (pa.y == min_y)
+    pa.add_property('tip_displacemet_index', type='int',
+                    data=np.zeros(len(pa.x)))
+    pa.tip_displacemet_index[index] = 1
 
 
 def get_fixed_beam(beam_length, beam_height, beam_inside_length,
@@ -116,93 +125,86 @@ def get_fixed_beam_without_clamp(beam_length, beam_height, boundary_height, spac
     return xb, yb, xs, ys
 
 
+def set_normals_tank(pa, spacing):
+    min_x = min(pa.x)
+    max_x = max(pa.x)
+    min_y = min(pa.y)
+    # left wall
+    fltr = (pa.x < min_x + 3. * spacing) & (pa.y > min_y + 3. * spacing)
+    for i in range(len(fltr)):
+        if fltr[i] == True:
+            pa.normal[3*i] = 1.
+            pa.normal[3*i+1] = 0.
+            pa.normal[3*i+2] = 0.
+
+    # right wall
+    fltr = (pa.x > max_x - 3. * spacing) & (pa.y > min_y + 3. * spacing)
+    for i in range(len(fltr)):
+        if fltr[i] == True:
+            pa.normal[3*i] = -1.
+            pa.normal[3*i+1] = 0.
+            pa.normal[3*i+2] = 0.
+
+    # bottom wall
+    fltr = (pa.x > min_x + 5. * spacing) & (pa.x < max_x - 5. * spacing)
+    for i in range(len(fltr)):
+        if fltr[i] == True:
+            pa.normal[3*i] = 0.
+            pa.normal[3*i+1] = 1.
+            pa.normal[3*i+2] = 0.
+
+
 class ElasticGate(Application):
     def add_user_options(self, group):
-        group.add_argument("--rho", action="store", type=float, dest="rho",
-                           default=7800.,
-                           help="Density of the particle (Defaults to 7800.)")
-
-        group.add_argument(
-            "--Vf", action="store", type=float, dest="Vf", default=0.05,
-            help="Velocity of the plate (Vf) (Defaults to 0.05)")
-
-        group.add_argument("--length", action="store", type=float,
-                           dest="length", default=0.1,
-                           help="Length of the plate")
-
-        group.add_argument("--height", action="store", type=float,
-                           dest="height", default=0.01,
-                           help="height of the plate")
-
-        group.add_argument("--deflection", action="store", type=float,
-                           dest="deflection", default=1e-4,
-                           help="Deflection of the plate")
-
-        group.add_argument("--N", action="store", type=int, dest="N",
-                           default=10,
-                           help="No of particles in the height direction")
-
-        group.add_argument("--final-force-time", action="store", type=float,
-                           dest="final_force_time", default=1e-3,
-                           help="Total time taken to apply the external load")
-
-        group.add_argument("--damping-c", action="store", type=float,
-                           dest="damping_c", default=0.1,
-                           help="Damping constant in damping force")
-
-        group.add_argument("--material", action="store", type=str,
-                           dest="material", default="steel",
-                           help="Material of the plate")
-
-        # add_bool_argument(group, 'shepard', dest='use_shepard_correction',
-        #                   default=False, help='Use shepard correction')
-
-        # add_bool_argument(group, 'bonet', dest='use_bonet_correction',
-        #                   default=False, help='Use Bonet and Lok correction')
-
-        # add_bool_argument(group, 'kgf', dest='use_kgf_correction',
-        #                   default=False, help='Use KGF correction')
+        group.add_argument("--d0", action="store", type=float, dest="d0",
+                           default=1e-3,
+                           help="Spacing between the particles")
 
     def consume_user_options(self):
-        self.dim = 2
+        # ================================================
+        # consume the user options first
+        # ================================================
+        self.d0 = self.options.d0
+        spacing = self.d0
 
         # ================================================
-        # properties related to the only fluids
+        # common properties
         # ================================================
-        spacing = 0.001
         self.hdx = 1.0
+        self.gx = 0.
+        self.gy = -9.81
+        self.gz = 0.
+        self.dim = 2
+        self.seval = None
 
+        # ================================================
+        # Fluid properties
+        # ================================================
         self.fluid_length = 0.1
         self.fluid_height = 0.14
-        self.fluid_density = 1000.0
         self.fluid_spacing = spacing
+        self.h_fluid = self.hdx * self.fluid_spacing
+        self.vref_fluid = np.sqrt(2 * 9.81 * self.fluid_height)
+        self.c0_fluid = 10 * self.vref_fluid
+        self.nu_fluid = 0.
+        self.rho0_fluid = 1000.0
+        self.fluid_density = 1000.0
+        self.mach_no_fluid = self.vref_fluid / self.c0_fluid
+        self.pb_fluid = self.rho0_fluid * self.c0_fluid**2.
+        self.alpha_fluid = 0.1
+        self.edac_alpha = 0.5  # these variable are doubt
+        self.edac_nu = self.edac_alpha * self.c0_fluid * self.h_fluid / 8  # these variable are doubt
+        self.boundary_equations_1 = get_boundary_identification_etvf_equations(
+            destinations=["fluid"], sources=["fluid", "tank", "gate",
+                                             "gate_support"])
 
+        # ================================================
+        # Tank properties
+        # ================================================
         self.tank_height = 0.15
         self.tank_length = 0.2
         self.tank_layers = 3
         self.tank_spacing = spacing
-
-        self.h_fluid = self.hdx * self.fluid_spacing
-
-        # self.solid_rho = 500
-        # self.m = 1000 * self.dx * self.dx
-        self.vref_fluid = np.sqrt(2 * 9.81 * self.fluid_height)
-        self.u_max_fluid = self.vref_fluid
-        self.c0_fluid = 10 * self.vref_fluid
-        print("co is")
-        print(self.c0_fluid)
-        self.mach_no_fluid = self.vref_fluid / self.c0_fluid
-        self.p0_fluid = self.fluid_density * self.c0_fluid**2.
-        self.alpha = 0.1
-        self.gy = -9.81
-
-        # for boundary particles
-        self.seval = None
-        self.boundary_equations_1 = get_boundary_identification_etvf_equations(
-            destinations=["fluid"], sources=["fluid", "tank", "gate",
-                                             "gate_support"],
-            boundaries=["tank", "gate", "gate_support"])
-        # print(self.boundary_equations)
 
         # ================================================
         # properties related to the elastic gate
@@ -211,44 +213,26 @@ class ElasticGate(Application):
         self.L = 0.005
         self.H = 0.079
         self.gate_spacing = self.fluid_spacing
-
         self.gate_rho0 = 1100
         self.gate_E = 11958923.292360354
         self.gate_nu = 0.4
-
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
-        # self.c0 = 5960
-        # print("speed of sound is")
-        # print(self.c0)
         self.pb_gate = self.gate_rho0 * self.c0_gate**2
-
-        self.edac_alpha = 0.5
-
-        self.edac_nu = self.edac_alpha * self.c0_gate * self.h_fluid / 8
-
-        # attributes for Sun PST technique
-        # dummy value, will be updated in consume user options
         self.u_max_gate = 50
         self.mach_no_gate = self.u_max_gate / self.c0_gate
-
-        # for pre step
-        # self.seval = None
-
-        # boundary equations
-        # self.boundary_equations = get_boundary_identification_etvf_equations(
-        #     destinations=["gate"], sources=["gate"])
         self.boundary_equations_2 = get_boundary_identification_etvf_equations(
             destinations=["gate"], sources=["gate", "gate_support"],
             boundaries=["gate_support"])
 
-        self.boundary_equations = self.boundary_equations_1 + self.boundary_equations_2
+        # ================================================
+        # common properties
+        # ================================================
+        self.boundary_equations = (self.boundary_equations_1 +
+                                   self.boundary_equations_2)
 
-        self.wall_layers = 2
-
-        self.artificial_stress_eps = 0.3
-
-        self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
+        self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (
+            self.c0_fluid * 1.1)
         self.dt_solid = 0.25 * self.h_fluid / (
             (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
 
@@ -392,6 +376,9 @@ class ElasticGate(Application):
         self.scheme.setup_properties([fluid, tank,
                                       gate, gate_support])
 
+        # add post processing variables.
+        find_displacement_index(gate)
+
         gate.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
         gate.rho_fsi[:] = self.fluid_density
 
@@ -401,157 +388,74 @@ class ElasticGate(Application):
         # set the pressure of the fluid
         fluid.p[:] = - self.fluid_density * self.gy * (max(fluid.y) - fluid.y[:])
 
+        gate.add_output_arrays(['tip_displacemet_index'])
+
+        # ================================
+        # set the normals of the tank
+        # ================================
+
+        set_normals_tank(tank, self.fluid_spacing)
+
         return [fluid, tank, gate, gate_support]
 
     def create_scheme(self):
-        etvf = FSIScheme(fluids=['fluid'],
-                         solids=['tank'],
-                         structures=['gate'],
-                         structure_solids=['gate_support'],
-                         dim=2,
-                         h_fluid=0.,
-                         rho0_fluid=0.,
-                         pb_fluid=0.,
-                         c0_fluid=0.,
-                         nu_fluid=0.,
-                         mach_no_fluid=0.,
-                         mach_no_structure=0.,
-                         gy=0.)
-
-        gtvf = FSIGTVFScheme(fluids=['fluid'],
+        ctvf = FSIETVFScheme(fluids=['fluid'],
                              solids=['tank'],
                              structures=['gate'],
                              structure_solids=['gate_support'],
                              dim=2,
                              h_fluid=0.,
-                             rho0_fluid=0.,
-                             pb_fluid=0.,
                              c0_fluid=0.,
                              nu_fluid=0.,
+                             rho0_fluid=0.,
                              mach_no_fluid=0.,
-                             mach_no_structure=0.,
-                             gy=0.)
+                             mach_no_structure=0.)
 
-        wcsph = FSIWCSPHScheme(fluids=['fluid'],
-                               solids=['tank'],
-                               structures=['gate'],
-                               structure_solids=['gate_support'],
-                               dim=2,
-                               h_fluid=0.,
-                               rho0_fluid=0.,
-                               pb_fluid=0.,
-                               c0_fluid=0.,
-                               nu_fluid=0.,
-                               mach_no_fluid=0.,
-                               mach_no_structure=0.,
-                               gy=0.)
+        substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
+                                           solids=['tank'],
+                                           structures=['gate'],
+                                           structure_solids=['gate_support'],
+                                           dim=2,
+                                           h_fluid=0.,
+                                           c0_fluid=0.,
+                                           nu_fluid=0.,
+                                           rho0_fluid=0.,
+                                           mach_no_fluid=0.,
+                                           mach_no_structure=0.)
 
-        substep = FSISubSteppingScheme(fluids=['fluid'],
-                                       solids=['tank'],
-                                       structures=['gate'],
-                                       structure_solids=['gate_support'],
-                                       dt_fluid=1.,
-                                       dt_solid=1.,
-                                       dim=2,
-                                       h_fluid=0.,
-                                       rho0_fluid=0.,
-                                       pb_fluid=0.,
-                                       c0_fluid=0.,
-                                       nu_fluid=0.,
-                                       mach_no_fluid=0.,
-                                       mach_no_structure=0.,
-                                       gy=0.)
+        s = SchemeChooser(default='ctvf', substep=substep, ctvf=ctvf)
 
-        wcsph_substep = FSISubSteppingWCSPHScheme(fluids=['fluid'],
-                                                  solids=['tank'],
-                                                  structures=['gate'],
-                                                  structure_solids=['gate_support'],
-                                                  dt_fluid=1.,
-                                                  dt_solid=1.,
-                                                  dim=2,
-                                                  h_fluid=0.,
-                                                  rho0_fluid=0.,
-                                                  pb_fluid=0.,
-                                                  c0_fluid=0.,
-                                                  nu_fluid=0.,
-                                                  mach_no_fluid=0.,
-                                                  mach_no_structure=0.,
-                                                  gy=0.)
-
-        rogers = FSIWCSPHSchemeRogers(fluids=['fluid'],
-                                      solids=['tank'],
-                                      structures=['gate'],
-                                      structure_solids=['gate_support'],
-                                      dim=2,
-                                      h_fluid=0.,
-                                      rho0_fluid=0.,
-                                      pb_fluid=0.,
-                                      c0_fluid=0.,
-                                      nu_fluid=0.,
-                                      mach_no_fluid=0.,
-                                      mach_no_structure=0.,
-                                      gy=0.)
-
-        s = SchemeChooser(default='etvf', etvf=etvf, gtvf=gtvf, wcsph=wcsph,
-                          substep=substep, sswcsph=wcsph_substep, rogers=rogers)
         return s
 
     def configure_scheme(self):
         # dt = 0.125 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
-        # TODO: This has to be changed for solid
-        # dt = 0.25 * self.h_fluid / (
-        #     (self.gate_E / self.gate_rho0)**0.5 + (self.u_max_gate/50.))
-
-        # self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
-        # self.dt_solid = 0.25 * self.h_fluid / (
-        #     (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
-        # if self.options.scheme == "substep" or "sswcsph":
-        #     dt = self.dt_fluid
+        dt = 0.25 * self.h_fluid / (
+            (self.gate_E / self.gate_rho0)**0.5 + (self.u_max_gate/50.))
 
         # print("DT: %s" % dt)
-        # tf = 0.2
+        tf = 0.5
 
-        # self.scheme.configure_solver(dt=dt, tf=tf, pfreq=100)
-
-        dt = 0.25 * self.h_fluid / (
-            (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
-
-        print("DT: %s" % dt)
-        tf = 0.2
-
-        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=100)
+        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=2000)
 
         self.scheme.configure(
             dim=2,
             h_fluid=self.h_fluid,
-            rho0_fluid=self.fluid_density,
-            pb_fluid=self.p0_fluid,
+            rho0_fluid=self.rho0_fluid,
+            pb_fluid=self.pb_fluid,
             c0_fluid=self.c0_fluid,
-            nu_fluid=0. * 1e-6,
+            nu_fluid=0.0,
             mach_no_fluid=self.mach_no_fluid,
             mach_no_structure=self.mach_no_gate,
             gy=self.gy,
-            artificial_vis_alpha=1.,
-            alpha=0.1,
+            alpha_fluid=0.1,
+            alpha_solid=1.,
+            beta_solid=0,
+            dt_fluid=self.dt_fluid,
+            dt_solid=self.dt_solid
         )
-
-        # if self.options.scheme == 'substep' or 'sswcsph':
-        #     self.scheme.configure(
-        #         dt_fluid=self.dt_fluid,
-        #         dt_solid=self.dt_solid
-        #     )
 
     def create_equations(self):
         eqns = self.scheme.get_equations()
-
-        # if self.options.scheme == 'etvf':
-        #     equation = eqns.groups[-1][5].equations[4]
-        #     equation.sources = ["tank", "fluid", "gate", "gate_support"]
-
-        # elif self.options.scheme == 'gtvf':
-        #     equation = eqns.groups[-1][4].equations[3]
-        #     # print(equation)
-        #     equation.sources = ["tank", "fluid", "gate", "gate_support"]
 
         return eqns
 
@@ -582,73 +486,111 @@ class ElasticGate(Application):
             a_eval.evaluate(t, dt)
 
     def post_process(self, fname):
-        from pysph.solver.utils import iter_output
-        from pysph.solver.utils import get_files, load
-
-        files = get_files(fname)
-
-        # initial position of the gate
-        index = 479
-        # index = 1748
-        data = load(files[0])
-        arrays = data['arrays']
-        gate = arrays['gate']
-        y_initial = gate.y[index]
-        x_initial = gate.x[index]
-
-        t, y_amplitude, x_amplitude = [], [], []
-        for sd, gate in iter_output(files[::5], 'gate'):
-            _t = sd['t']
-            t.append(_t)
-            y_amplitude.append(gate.y[index] - y_initial)
-            x_amplitude.append(gate.x[index] - x_initial)
-
+        from pysph.solver.utils import iter_output, load
         import os
         from matplotlib import pyplot as plt
+
+        info = self.read_info(fname)
+        files = self.output_files
+
+        data = load(files[0])
+        arrays = data['arrays']
+        pa = arrays['gate']
+        index = np.where(pa.tip_displacemet_index == 1)[0][0]
+        y_0 = pa.y[index]
+        x_0 = pa.x[index]
+
+        t_ctvf, y_ctvf, x_ctvf = [], [], []
+        for sd, gate in iter_output(files[::5], 'gate'):
+            _t = sd['t']
+            t_ctvf.append(_t)
+            y_ctvf.append(gate.y[index] - y_0)
+            x_ctvf.append(gate.x[index] - x_0)
 
         # gtvf data
         path = os.path.abspath(__file__)
         directory = os.path.dirname(path)
 
-        data = np.loadtxt(os.path.join(directory, 'elastic_dam_break_vertical_displacement_simulated.csv'),
-                          delimiter=',')
-        t_wcsph, amplitude_wcsph = data[:, 0], data[:, 1]
+        # load the data
+        data_x_disp_antoci_exp = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_antoci_2007_experiment.csv'),
+                                            delimiter=',')
+        data_x_disp_khayyer_2018 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_khayyer_2018_isph_sph.csv'),
+                                              delimiter=',')
+        data_x_disp_yang_2012 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_yang_2012_sph_fem.csv'),
+                                           delimiter=',')
+        data_x_disp_ng_2020 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_ng_2020_sph_vcpm_alpha_1.csv'),
+                                         delimiter=',')
+        data_x_disp_wcsph_pysph = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_wcsph_pysph.csv'),
+                                             delimiter=',')
 
-        data = np.loadtxt(os.path.join(directory, 'elastic_dam_break_vertical_displacement_experimental.csv'),
-                          delimiter=',')
-        t_exp, amplitude_exp = data[:, 0], data[:, 1]
+        data_y_disp_antoci_exp = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_antoci_2007_experiment.csv'),
+                                            delimiter=',')
+        data_y_disp_khayyer_2018 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_khayyer_2018_isph_sph.csv'),
+                                              delimiter=',')
+        data_y_disp_yang_2012 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_yang_2012_sph_fem.csv'),
+                                           delimiter=',')
+        data_y_disp_ng_2020 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_ng_2020_sph_vcpm_alpha_1.csv'),
+                                         delimiter=',')
 
+        txant, xdant = data_x_disp_antoci_exp[:, 0], data_x_disp_antoci_exp[:, 1]
+        txkha, xdkha = data_x_disp_khayyer_2018[:, 0], data_x_disp_khayyer_2018[:, 1]
+        txyan, xdyan = data_x_disp_yang_2012[:, 0], data_x_disp_yang_2012[:, 1]
+        txng, xdng = data_x_disp_ng_2020[:, 0], data_x_disp_ng_2020[:, 1]
+        txwcsph, xdwcsph = data_x_disp_wcsph_pysph[:, 0], data_x_disp_wcsph_pysph[:, 1]
+        txwcsph += 0.05
+
+        tyant, ydant = data_y_disp_antoci_exp[:, 0], data_y_disp_antoci_exp[:, 1]
+        tykha, ydkha = data_y_disp_khayyer_2018[:, 0], data_y_disp_khayyer_2018[:, 1]
+        tyyan, ydyan = data_y_disp_yang_2012[:, 0], data_y_disp_yang_2012[:, 1]
+        tyng, ydng = data_y_disp_ng_2020[:, 0], data_y_disp_ng_2020[:, 1]
+
+        res = os.path.join(self.output_dir, "results.npz")
+        np.savez(res, txant=txant, xdant=xdant, txkha=txkha, xdkha=xdkha,
+                 txyan=txyan, xdyan=xdyan, txng=txng, xdng=xdng, tyant=tyant,
+                 ydant=ydant, tykha=tykha, ydkha=ydkha, tyyan=tyyan,
+                 ydyan=ydyan, tyng=tyng, ydng=ydng, txwcsph=txwcsph,
+                 xdwcsph=xdwcsph, t_ctvf=t_ctvf, x_ctvf=x_ctvf, y_ctvf=y_ctvf)
+
+        # ========================
+        # x amplitude figure
+        # ========================
         plt.clf()
-        plt.plot(t_wcsph, amplitude_wcsph, "s-", label='WCSPH Paper')
-        plt.plot(t_exp, amplitude_exp, "s-", label='Experiment')
-        plt.plot(t, y_amplitude, "-", label='CTVF')
+        plt.plot(txant, xdant, "o", label='Antoci 2008, Experiment')
+        plt.plot(txkha, xdkha, "^", label='Khayyer 2018, ISPH-SPH')
+        plt.plot(txyan, xdyan, "+", label='Yang 2012, SPH-FEM')
+        plt.plot(txng, xdng, "v", label='Ng 2020, SPH-VCPM')
+        plt.plot(txwcsph, xdwcsph, "*", label='WCSPH PySPH')
+        plt.plot(t_ctvf, x_ctvf, "-", label='CTVF')
 
+        plt.title('x amplitude')
         plt.xlabel('t')
-        plt.ylabel('amplitude')
+        plt.ylabel('x amplitude')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "x_amplitude_with_t.png")
+        plt.savefig(fig, dpi=300)
+        # ========================
+        # x amplitude figure
+        # ========================
+
+        # ========================
+        # y amplitude figure
+        # ========================
+        plt.clf()
+        plt.plot(tyant, ydant, "o", label='Antoci 2008, Experiment')
+        plt.plot(tykha, ydkha, "v", label='Khayyer 2018, ISPH-SPH')
+        plt.plot(tyyan, ydyan, "o", label='Yang 2012, SPH-FEM')
+        plt.plot(tyng, ydng, "o", label='Ng 2020, SPH-VCPM')
+        plt.plot(t_ctvf, y_ctvf, "-", label='CTVF')
+
+        plt.title('y amplitude')
+        plt.xlabel('t')
+        plt.ylabel('y amplitude')
         plt.legend()
         fig = os.path.join(os.path.dirname(fname), "y_amplitude_with_t.png")
         plt.savefig(fig, dpi=300)
-
-        # x amplitude
-        data = np.loadtxt(os.path.join(directory, 'elastic_dam_break_horizontal_displacement_simulated.csv'),
-                          delimiter=',')
-        t_wcsph, amplitude_wcsph = data[:, 0], data[:, 1]
-
-        data = np.loadtxt(os.path.join(directory, 'elastic_dam_break_horizontal_displacement_experimental.csv'),
-                          delimiter=',')
-        t_exp, amplitude_exp = data[:, 0], data[:, 1]
-        plt.clf()
-        plt.plot(t_wcsph, amplitude_wcsph, "s-", label='WCSPH Paper')
-        plt.plot(t_exp, amplitude_exp, "s-", label='Experiment')
-        plt.plot(t, x_amplitude, "-", label='CTVF')
-
-        plt.xlabel('t')
-        plt.ylabel('amplitude')
-        plt.legend()
-        print(fname)
-        fig = os.path.join(os.path.dirname(fname), "x_amplitude_with_t.png")
-        print(fig)
-        plt.savefig(fig, dpi=300)
+        # ========================
+        # y amplitude figure
+        # ========================
 
 
 if __name__ == '__main__':

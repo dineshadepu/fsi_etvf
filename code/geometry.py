@@ -103,7 +103,7 @@ def get_fluid_tank_3d(fluid_length,
 
 
 def create_tank_2d_from_block_2d(xf, yf, tank_length, tank_height,
-                                 tank_spacing, tank_layers):
+                                 tank_spacing, tank_layers, close=False):
     """
     This is mainly used by granular flows
 
@@ -129,8 +129,18 @@ def create_tank_2d_from_block_2d(xf, yf, tank_length, tank_height,
     xbottom += min(xleft) - min(xbottom)
     ybottom += min(yleft) - max(ybottom) - tank_spacing
 
-    x = np.concatenate([xleft, xright, xbottom])
-    y = np.concatenate([yleft, yright, ybottom])
+    xtop = np.array([])
+    ytop = np.array([])
+    if close is True:
+        xtop, ytop = get_2d_block(dx=tank_spacing,
+                                  length=max(xright) - min(xleft),
+                                  height=(tank_layers - 1) * tank_spacing,
+                                  center=[0., 0.])
+        xtop += min(xleft) - min(xtop)
+        ytop += max(yleft) - min(ytop) - tank_spacing
+
+    x = np.concatenate([xleft, xright, xbottom, xtop])
+    y = np.concatenate([yleft, yright, ybottom, ytop])
 
     return x, y
 

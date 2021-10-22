@@ -1,6 +1,13 @@
-"""A hydrostatic water column on an elastic plate
-"""
+"""This is also there is Sun2021, An accurate FSI-SPH modeling of challenging
+fluid-structure interaction problems in two and three dimensions. Which gives
+us the expression for the rolling tank's theta.
 
+
+1. Development of a fully Lagrangian MPS-based coupled method for simulation of
+fluid-structure interaction problems. 3.2.2
+https://doi.org/10.1016/j.jfluidstructs.2014.07.007
+
+"""
 import numpy as np
 
 from pysph.base.kernels import CubicSpline
@@ -9,9 +16,6 @@ from pysph.base.utils import get_particle_array
 from pysph.sph.integrator import EPECIntegrator
 from pysph.solver.application import Application
 from pysph.sph.scheme import SchemeChooser
-
-# from rigid_fluid_coupling import RigidFluidCouplingScheme
-from geometry import hydrostatic_tank_2d, create_tank_2d_from_block_2d
 
 from pysph.examples.solid_mech.impact import add_properties
 # from pysph.examples.rigid_body.sphere_in_vessel_akinci import (create_boundary,
@@ -28,10 +32,53 @@ from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
 
 
-def get_hydrostatic_tank_with_fluid(fluid_length=1., fluid_height=2., tank_height=2.3,
-                                    tank_layers=2, fluid_spacing=0.1):
-    import matplotlib.pyplot as plt
+def create_tank_2d_from_block_2d(xf, yf, tank_length, tank_height,
+                                 tank_spacing, tank_layers, close=False):
+    """
+    This is mainly used by granular flows
 
+    Tank particles radius is spacing / 2.
+    """
+    ####################################
+    # create the left wall of the tank #
+    ####################################
+    xleft, yleft = get_2d_block(dx=tank_spacing,
+                                length=(tank_layers - 1) * tank_spacing,
+                                height=tank_height + 1. * tank_spacing,
+                                center=[0., 0.])
+    xleft += min(xf) - max(xleft) - tank_spacing
+    yleft += min(yf) - min(yleft)
+
+    xright = xleft + abs(min(xleft)) + tank_length
+    xright -= min(xright) - max(xf) - tank_spacing
+    yright = yleft
+
+    xbottom, ybottom = get_2d_block(dx=tank_spacing,
+                                    length=max(xright) - min(xleft),
+                                    height=(tank_layers - 1) * tank_spacing,
+                                    center=[0., 0.])
+    xbottom += min(xleft) - min(xbottom)
+    ybottom -= max(ybottom) - min(yf) + tank_spacing
+
+    if close is True:
+        xtop, ytop = get_2d_block(dx=tank_spacing,
+                                  length=max(xright) - min(xleft),
+                                  height=(tank_layers - 1) * tank_spacing,
+                                  center=[0., 0.])
+        xtop += min(xleft) - min(xtop)
+        ytop += max(yleft) - min(ytop) + 1. * tank_spacing
+
+    x = np.concatenate([xleft, xright, xbottom, xtop])
+    y = np.concatenate([yleft, yright, ybottom, ytop])
+    # x = np.concatenate([xleft, xright])
+    # y = np.concatenate([yleft, yright])
+
+    return x, y
+
+
+def get_hydrostatic_tank_with_fluid(fluid_length=1., fluid_height=2.,
+                                    tank_height=2.3, tank_layers=2,
+                                    fluid_spacing=0.1):
     xf, yf = get_2d_block(dx=fluid_spacing,
                           length=fluid_length,
                           height=fluid_height)
@@ -48,82 +95,86 @@ def get_hydrostatic_tank_with_fluid(fluid_length=1., fluid_height=2., tank_heigh
     xt_2 += max(xf) - min(xt_2) + fluid_spacing
     yt_2 += min(yf) - min(yt_2)
 
-    xt = np.concatenate([xt_1, xt_2])
-    yt = np.concatenate([yt_1, yt_2])
+    xt_3, yt_3 = get_2d_block(dx=fluid_spacing,
+                              length=max(xt_2) - min(xt_1),
+                              height=tank_layers*fluid_spacing)
 
-    # plt.scatter(xf, yf, s=10)
-    # plt.scatter(xt, yt, s=10)
-    # plt.axes().set_aspect('equal', 'datalim')
-    # plt.savefig("geometry", dpi=300)
-    # plt.show()
+    xt = np.concatenate([xt_1, xt_2, xt_3])
+    yt = np.concatenate([yt_1, yt_2, yt_3])
 
     return xf, yf, xt, yt
 
 
 def get_elastic_plate_with_support(beam_length, beam_height, boundary_layers,
                                    spacing):
-    import matplotlib.pyplot as plt
     # create a block first
     xb, yb = get_2d_block(dx=spacing, length=beam_length,
                           height=beam_height)
 
     # create a (support) block with required number of layers
-    xs1, ys1 = get_2d_block(dx=spacing, length=boundary_layers * spacing,
-                            height=beam_height)
-    xs1 -= np.max(xs1) - np.min(xb) + spacing
-    # ys1 += np.min(yb) - np.max(ys1) - spacing
-
-    # create a (support) block with required number of layers
-    xs2, ys2 = get_2d_block(dx=spacing, length=boundary_layers * spacing,
-                            height=beam_height)
-    xs2 += np.max(xb) - np.min(xs2) + spacing
-    # ys2 += np.max(ys2) - np.min(yb) + spacing
-
-    xs = np.concatenate([xs1, xs2])
-    ys = np.concatenate([ys1, ys2])
-
-    # plt.scatter(xs, ys, s=10)
-    # plt.scatter(xb, yb, s=10)
-    # plt.axes().set_aspect('equal', 'datalim')
-    # plt.savefig("geometry", dpi=300)
-    # plt.show()
-
+    xs, ys = get_2d_block(dx=spacing, length=(3. * beam_length),
+                          height=boundary_layers * spacing)
+    ys += np.max(yb) - np.min(ys) + spacing
     return xb, yb, xs, ys
+
+
+def find_displacement_index(pa):
+    x = pa.x
+    y = pa.y
+    min_y = min(y)
+    min_y_indices = np.where(y == min_y)[0]
+    index = min_y_indices[int(len(min_y_indices)/2)]
+    pa.add_property('tip_displacemet_index', type='int',
+                    data=np.zeros(len(pa.x)))
+    pa.tip_displacemet_index[index] = 1
+    pa.add_output_arrays(['tip_displacemet_index'])
+
+
+def set_rotation_point(pa):
+    y = pa.y
+    min_y = min(y)
+    min_y_indices = np.where(y == min_y)[0]
+    index = min_y_indices[int(len(min_y_indices)/2)]
+    pa.xcm[0] = pa.x[index]
+    pa.xcm[1] = pa.y[index]
+
+
+def set_body_frame_position_vectors(pa):
+    """Save the position vectors w.r.t body frame"""
+    # loop over all the bodies
+    add_properties(pa, 'dx0', 'dy0', 'dz0')
+    cm_i = pa.xcm
+    for j in range(len(pa.x)):
+        pa.dx0[j] = pa.x[j] - cm_i[0]
+        pa.dy0[j] = pa.y[j] - cm_i[1]
+        pa.dz0[j] = pa.z[j] - cm_i[2]
 
 
 class ElasticGate(Application):
     def add_user_options(self, group):
-        group.add_argument("--N", action="store", type=int, dest="N",
-                           default=5,
+        group.add_argument("--d0", action="store", type=float, dest="d0",
+                           default=1e-3,
                            help="No of particles in the height direction")
 
     def consume_user_options(self):
         self.dim = 2
-        self.N = self.options.N
+        self.d0 = self.options.d0
 
         # ================================================
         # properties related to the only fluids
         # ================================================
-        spacing = 0.05 / self.N
+        spacing = self.d0
         self.hdx = 1.0
 
-        self.fluid_length = 1.0
-        self.fluid_height = 2.0
+        # ================================================
+        # Fluid properties
+        # ================================================
+        self.fluid_length = 609 * 1e-3
+        self.fluid_height = 57.4 * 1e-3
         self.fluid_density = 1000.0
         self.fluid_spacing = spacing
         self.rho0_fluid = self.fluid_density
-
-        self.tank_height = 1.5
-        self.tank_length = 3.
-        self.tank_layers = 2
-        self.tank_spacing = spacing
-
-        self.h_fluid = self.hdx * self.fluid_spacing
-
-        # self.solid_rho = 500
-        # self.m = 1000 * self.dx * self.dx
         self.vref_fluid = np.sqrt(2 * 9.81 * self.fluid_height)
-        print("vref is ", self.vref_fluid)
         self.u_max_fluid = self.vref_fluid
         self.c0_fluid = 10 * self.vref_fluid
         self.mach_no_fluid = self.vref_fluid / self.c0_fluid
@@ -131,59 +182,48 @@ class ElasticGate(Application):
         self.pb_fluid = self.p0_fluid
         self.alpha = 0.1
         self.gy = -9.81
-
-        # for boundary particles
         self.seval = None
         self.boundary_equations_1 = get_boundary_identification_etvf_equations(
             destinations=["fluid"], sources=["fluid", "tank", "gate",
                                              "gate_support"],
             boundaries=["tank", "gate", "gate_support"])
-        # print(self.boundary_equations)
+
+        # ================================================
+        # Tank properties
+        # ================================================
+        self.tank_height = 344.5 * 1e-3
+        self.tank_length = 609 * 1e-3
+        self.tank_layers = 3
+        self.tank_spacing = spacing
+
+        self.h_fluid = self.hdx * self.fluid_spacing
 
         # ================================================
         # properties related to the elastic gate
         # ================================================
         # elastic gate is made of rubber
-        self.gate_length = 1.
-        self.gate_height = 0.05
+        self.gate_length = 4 * 1e-3
+        self.gate_height = 287.1 * 1e-3
         self.gate_spacing = self.fluid_spacing
-
-        self.gate_rho0 = 2700
-        self.gate_E = 67.5 * 1e9
-        self.gate_nu = 0.34
-
+        self.gate_rho0 = 1900
+        self.gate_E = 4 * 1e6
+        self.gate_nu = 0.49
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
-        # self.c0 = 5960
-        # print("speed of sound is")
-        # print(self.c0)
         self.pb_gate = self.gate_rho0 * self.c0_gate**2
-
         self.edac_alpha = 0.5
-
         self.edac_nu = self.edac_alpha * self.c0_gate * self.h_fluid / 8
-
-        # attributes for Sun PST technique
-        # dummy value, will be updated in consume user options
         self.u_max_gate = 0.05
         self.mach_no_gate = self.u_max_gate / self.c0_gate
-
-        # for pre step
-        # self.seval = None
-
-        # boundary equations
-        # self.boundary_equations = get_boundary_identification_etvf_equations(
-        #     destinations=["gate"], sources=["gate"])
         self.boundary_equations_2 = get_boundary_identification_etvf_equations(
             destinations=["gate"], sources=["gate", "gate_support"],
             boundaries=["gate_support"])
 
+        # ================================================
+        # common properties
+        # ================================================
         self.boundary_equations = self.boundary_equations_1 + self.boundary_equations_2
-
-        self.wall_layers = 2
-
         self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
-        print("dt fluid is", self.dt_fluid)
         self.dt_solid = 0.25 * self.h_fluid / (
             (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
 
@@ -191,11 +231,12 @@ class ElasticGate(Application):
         # ===================================
         # Create fluid
         # ===================================
-        xf, yf, xt, yt = get_hydrostatic_tank_with_fluid(self.fluid_length,
-                                                         self.fluid_height,
-                                                         self.tank_length,
-                                                         self.tank_layers,
-                                                         self.fluid_spacing)
+        xf, yf = get_2d_block(dx=self.fluid_spacing, length=self.fluid_length,
+                              height=self.fluid_height)
+
+        xt, yt = create_tank_2d_from_block_2d(
+            xf, yf, self.tank_length, self.tank_height, self.tank_spacing,
+            self.tank_layers, close=True)
 
         m_fluid = self.fluid_density * self.fluid_spacing**2.
 
@@ -227,6 +268,11 @@ class ElasticGate(Application):
                                   rho=self.fluid_density,
                                   rad_s=self.fluid_spacing/2.,
                                   name="tank")
+        # add properties to rotate the tank about some point
+        tank.add_constant('theta', 0.)
+        tank.add_constant('xcm', np.zeros(3, dtype=float))
+        set_rotation_point(tank)
+        set_body_frame_position_vectors(tank)
 
         # =============================================
         # Only structures part particle properties
@@ -235,23 +281,16 @@ class ElasticGate(Application):
                                                         self.gate_height,
                                                         self.tank_layers,
                                                         self.fluid_spacing)
-        # make sure that the gate intersection with wall starts at the 0.
-        min_xp = np.min(xp)
-
-        # add this to the gate and wall
-        xp += abs(min_xp)
-        xw += abs(min_xp)
-
-        max_xw = np.max(xw)
-        xp -= abs(max_xw)
-        xw -= abs(max_xw)
+        # scale of shift of gate support
+        scale = max(tank.y) - max(yw) + self.fluid_spacing
+        yp += scale
+        yw += scale
 
         m = self.gate_rho0 * self.fluid_spacing**2.
 
         # ===================================
         # Create elastic gate
         # ===================================
-        xp += self.fluid_length
         gate = get_particle_array(
             x=xp, y=yp, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate",
             constants={
@@ -261,12 +300,12 @@ class ElasticGate(Application):
                 'spacing0': self.gate_spacing,
                 'rho_ref': self.gate_rho0
             })
+        # add post processing variables.
+        find_displacement_index(gate)
 
         # ===================================
         # Create elastic gate support
         # ===================================
-        xw += self.fluid_length
-        # xw += max(xf) + max(xf) / 2.
         gate_support = get_particle_array(
             x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate_support",
             constants={
@@ -285,15 +324,6 @@ class ElasticGate(Application):
 
         gate_support.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
         gate_support.rho_fsi[:] = self.fluid_density
-
-        # adjust the gate and gate support
-        dx = min(gate.x) - min(fluid.x)
-        gate.x -= dx
-        gate_support.x -= dx
-
-        dy = max(gate.y) - min(fluid.y) + self.fluid_spacing
-        gate.y -= dy
-        gate_support.y -= dy
 
         return [fluid, tank, gate, gate_support]
 
@@ -327,7 +357,7 @@ class ElasticGate(Application):
         print("time step fluid dt", dt)
 
         print("DT: %s" % dt)
-        tf = 1.
+        tf = 5.
 
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=2000)
 
@@ -384,45 +414,63 @@ class ElasticGate(Application):
             # When
             a_eval.evaluate(t, dt)
 
+    def post_step(self, solver):
+        t = solver.t
+        dt = solver.dt
+        for pa in self.particles:
+            if pa.name == 'tank':
+                theta = 2. * np.sin(2. * np.pi * 0.607 * t) * np.pi / 180
+                theta_dot = (2. * 2. * np.pi * 0.607 *
+                             np.cos(2. * np.pi * 0.607 * t) * np.pi) / 180
+
+                # rotate the position of the vector in the body frame to
+                # global frame
+                R0 = np.cos(theta)
+                R1 = -np.sin(theta)
+                R2 = np.sin(theta)
+                R3 = np.cos(theta)
+                for i in range(len(pa.x)):
+                    pa.x[i] = pa.xcm[0] + R0 * pa.dx0[i] + R1 * pa.dy0[i]
+                    pa.y[i] = pa.xcm[1] + R2 * pa.dx0[i] + R3 * pa.dy0[i]
+                    pa.u[i] = - theta_dot * (pa.xcm[1] - pa.y[i])
+                    pa.v[i] = theta_dot * (pa.xcm[0] - pa.x[i])
+                    pa.uhat[i] = pa.u[i]
+                    pa.vhat[i] = pa.v[i]
+
     def post_process(self, fname):
         from pysph.solver.utils import iter_output, load
-        from pysph.solver.utils import get_files
-
-        files = get_files(fname)
-
-        data = load(files[0])
-        # solver_data = data['solver_data']
-        arrays = data['arrays']
-        pa = arrays['gate']
-        index = 300
-        y_0 = pa.y[index]
-
-        files = files[0::1]
-        # print(len(files))
-        t, amplitude = [], []
-        for sd, gate in iter_output(files, 'gate'):
-            _t = sd['t']
-            t.append(_t)
-            amplitude.append((gate.y[index] - y_0) * 1)
-
-        # matplotlib.use('Agg')
-
         import os
         from matplotlib import pyplot as plt
 
+        info = self.read_info(fname)
+        files = self.output_files
+
+        data = load(files[0])
+        arrays = data['arrays']
+        pa = arrays['gate']
+        index = np.where(pa.tip_displacemet_index == 1)[0][0]
+        y_0 = pa.y[index]
+
+        files = files[0::1]
+        t_ctvf, y_ctvf = [], []
+        for sd, gate in iter_output(files, 'gate'):
+            _t = sd['t']
+            t_ctvf.append(_t)
+            y_ctvf.append((gate.y[index] - y_0) * 1)
+
+        t_analytical = np.linspace(0., 1., 1000)
+        y_analytical = -6.849 * 1e-5 * np.ones_like(t_analytical)
+
         res = os.path.join(self.output_dir, "results.npz")
-        np.savez(res, t=t, amplitude=amplitude)
+        np.savez(res, t_analytical=t_analytical, y_analytical=y_analytical,
+                 y_ctvf=y_ctvf, t_ctvf=t_ctvf)
 
         plt.clf()
-        plt.plot(t, amplitude, "-", label='Simulated')
-
-        # exact solution
-        t = np.linspace(0., 1., 1000)
-        y = -6.849 * 1e-5 * np.ones_like(t)
-        plt.plot(t, y, "-", label='Exact')
+        plt.plot(t_analytical, y_analytical, label='Analytical')
+        plt.plot(t_ctvf, y_ctvf, "-", label='Simulated')
 
         plt.xlabel('t')
-        plt.ylabel('amplitude')
+        plt.ylabel('y-amplitude')
         plt.legend()
         fig = os.path.join(os.path.dirname(fname), "amplitude_with_t.png")
         plt.savefig(fig, dpi=300)
@@ -432,5 +480,3 @@ if __name__ == '__main__':
     app = ElasticGate()
     app.run()
     app.post_process(app.info_filename)
-    # get_elastic_plate_with_support(1.0, 0.3, 2, 0.05)
-    # get_hydrostatic_tank_with_fluid()

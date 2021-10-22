@@ -6,8 +6,10 @@
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage{multirow}
+\usepackage{booktabs}
 \usepackage[utf8]{inputenc}
 \usepackage{cleveref}
+\usepackage[section]{placeins}
 
 % For the TODOs
 \usepackage{xcolor}
@@ -24,6 +26,7 @@
 \newcommand{\ten}[1]{\ensuremath{\mathbf{#1}}}
 
 \usepackage{lineno}
+
 
 \journal{}
 
@@ -280,173 +283,13 @@ The papers we have followed for the benchmarks are
 % =========================================
 % start
 % =========================================
-
-\subsection{Hydrostatic water column on an elastic plate}
-\label{sec:results:hstank-elastic-plate}
-
-
-In this problem we check the accuracy and stability-preserving property of the
-proposed scheme in handling the fluid structure interaction. This problem has
-been studied in Li et al. (2015), Fourey et al. (2017), Khayyer et
-al. (2018a), Hu et al. (2019), (2021), (2021) papers. This benchmark has an
-analytical solution derived in Li et al. (2015).
-
-We can see the problem description in figure XXX. The water column height is
-2m and has a width of 0.5m. An aluminum plate of thickness 0.05m is placed at
-the bottom of the tank.The material properties of the aluminum are as follows,
-a density of 2700 $kg/m^3$, an Young’s modulus of $E = 6.75 \times 10^{10} Pa$,
-and the Poisson’s ratio $\nu = 0.34$. The plate is clamped on both the
-sides. Once the simulation begins, a sudden hydrostatic pressure force is
-applied on the aluminum plate. With time the plate oscillates and comes to
-rest. We compare the static displacement of the plate with the analytical
-solution.
-
-In the current simulation a total of two particle spacing is used. One with
-$\delta x = 0.04 , 0.02m and 0.01 m$ and use quintic spline as a kernel. We
-use 1e-6, 1e-7 for timestepping of fluid, solid phases respectively. All the
-simulations are run for a total time of $t_f = 1e-4s$. In figures XXX, XXX,
-XXX we show the final positions of the particles with different particle
-resolutions. The fluid contours are pressure and the structure contours is the
-y-displacement. In figure XXX we plot the midpoint deflection with time and
-compare it with the analytical solution provided by khayyer . It can be seen
-that the results produced by the current scheme are accurate and validates the
-scheme for further use in FSI problems. We have run a convergence analysis
-with a reducing spacing and as can be seen in the figure, that as the particle
-spacing is reduced the error is reduced.
-
-Also analyse any other extra plots you are planning to put.
-
 % =========================================
-% end
-% =========================================
-
-
-
-\subsection{Elastic bar hanging under gravity}
-\label{sec:elastic-bar-hanging}
-
-
+\subsection{Hwang 2014 static cantilever beam}
+\label{sec:hwang-2014-static-cantilever-beam}
 Currently this is a sub problem of elastic dam break. In that problem we are
 simulating gate with out considering the gravity. By considering the gravity
 we get float division error. It will be interesting to see why such thing is
 happening only in the case with gravity and solving such is fun.
-
-
-\subsection{Dam break with elastic gate}
-\label{sec:dam-break-elastic-gate}
-
-Taken from \citet{sun2019fully}.
-
-A block of fluid, which is suddenly released under gravity hits an elastic
-plate. This benchmark is simulated in many papers.
-
-The material properties of the elastic gate are as follows, and Young's
-modulus of $0.01 GPa$ with a Poisson ratio of $0.35$ and a density of
-$2500 kg/m^3$.
-
-The length of the fluid block is taken as $0.1m$, and the height is $0.3m$,
-and the length of the elastic gate is $0.03m$ with a height of $0.05m$ and is
-placed at a distance of $0.1m$ from the end of the fluid block.
-
-
-As the simulation starts the fluid starts flowing under the influence of
-gravity and after some time, it hits the elastic gate. Due to the influence of
-the fluid the elastic gate deforms and due to the elastic gate the fluid
-starts raising. The dynamics of both mediums is influenced by one another.
-
-
-We have compared the the tip of the elastic gate with time against the
-experimental results produced by \cite{xxx}. As can be seen the results
-produced by the current scheme are accurate and are able to reproduce the
-experimental results.
-
-
-
-\subsection{Hydrostatic water column on an elastic plate}
-\label{sec:hydrostatic-water-column-on-an-elastic-plate}
-
-In this problem we check the accuracy and stability-preserving property of the
-proposed scheme in handling the fluid structure interaction. This problem has
-been studied in Li et al. (2015), Fourey et al. (2017), Khayyer et
-al. (2018a), Hu et al. (2019), (2021), (2021) papers. This benchmark has an
-analytical solution derived in Li et al. (2015).
-
-We can see the problem description in figure XXX. The water column height is
-2m and has a width of 0.5m. An aluminum plate of thickness 0.05m is placed at
-the bottom of the tank.The material properties of the aluminum are as follows,
-a density of 2700 $kg/m^3$, an Young’s modulus of $E = 6.75 \times 10^{10} Pa$,
-and the Poisson’s ratio $\nu = 0.34$. The plate is clamped on both the
-sides. Once the simulation begins, a sudden hydrostatic pressure force is
-applied on the aluminum plate. With time the plate oscillates and comes to
-rest. We compare the static displacement of the plate with the analytical
-solution.
-
-In the current simulation a total of two particle spacing is used. One with
-$\delta x = 0.04 , 0.02m and 0.01 m$ and use quintic spline as a kernel. We
-use 1e-6, 1e-7 for timestepping of fluid, solid phases respectively. All the
-simulations are run for a total time of $t_f = 1e-4s$. In figures XXX, XXX,
-XXX we show the final positions of the particles with different particle
-resolutions. The fluid contours are pressure and the structure contours is the
-y-displacement. In figure XXX we plot the midpoint deflection with time and
-compare it with the analytical solution provided by khayyer. It can be seen
-that the results produced by the current scheme are accurate and validates the
-scheme for further use in FSI problems. We have run a convergence analysis
-with a reducing spacing and as can be seen in the figure, that as the particle
-spacing is reduced the error is reduced.
-
-Also analyse any other extra plots you are planning to put.
-
-
-
-\subsection{Water impact onto a forefront elastic plate}
-\label{sec:water-impact-forefront}
-
-In this example the elastic plate is placed at the end. Which gets
-impacted due to the moving fluid. Further information can be found at
-section 3.2 of \cite{liu2013numerical}, \citet{sun2019fully}.
-
-
-
-
-\subsection{High speed impact of an elastic aluminum wedge on undisturbed
-  water surface}
-\label{sec:wedge-impact-on-water}
-
-Here we simulate a high speed elastic aluminum wedge impacting on undisturbed
-water surface. This benchmark was dealt in
-{A $\delta$ SPH-SPIM coupled method for fluid-structure interaction problems} and
-{abbas khayyer} papers.
-This is an attractive benchmark as it has an semi-analytical solution.
-
-A fluid of length 6 m and a height of 2.2 m is settled inside a tank of length
-6m and height 4m which gives rise to a pressure distribution of a hydrostatic
-tank. Into this hydrostatic tank a wedge of length 0.6m and a thickness of
-0.04m is been dropped with a velocity of 30 m/s. The wedge angle is 10
-degrees. Please see figure \ref{fig:half-wedge-deformable} for visual clarity.
-
-The initial particle spacing is set as 0.005m and the total number of
-particles combining the wedge, tank and fluid is TOBEDONE. The density of the
-fluid is taken as 1000 $kg/m^3$. The material properties of the wedge are as
-follows: density of 2700 $Kg/m^3$, Young's modulus of 6.75 1e10 $N/m^2$ and a
-Poisson ratio of 0.34. An artificial viscosity $alpha$ of 0.1 is used for
-fluids and 1 for solid phase.
-
-In figure \ref{wedge-entering-the-tank}, at different time stamps, we plot the
-pressure fields of water and sigma 00 if the flexible wedge. (We need to give
-some physical insight of what is expected and what is been observed, provided
-our simulations are correct)
-
-
-
-A total of three points are marked on the wedge for a qualitative validation.
-In figure \ref{point-A-wedge-displacement}, we plot the displacement of point
-A with time, and compared with Abbhas and and the semi analytical solution of
-scolon 2004. Similarly at point B and point C we compare the pressure of the
-current scheme with the one provided with Abbas and the semi analytical
-solution. It can be seen that the current scheme is able to produce the
-results with a reasonable accuracy.
-
-
 
 
 \subsection{Dynamics response of an elastic plate}
@@ -497,12 +340,243 @@ solution. It can be seen that the current scheme is able to produce the
 results with a reasonable accuracy.
 
 
+\subsection{Elastic bar hanging under gravity}
+\label{sec:elastic-bar-hanging}
 
-\subsection{Static test to test Structure formulation}
-\label{sec:static-test}
+Currently this is a sub problem of elastic dam break. In that problem we are
+simulating gate with out considering the gravity. By considering the gravity
+we get float division error.
 
-In \citet{hwang2015development} has a static test where a cantilever beam is
-acted upon by a constant load at the tip.
+
+
+\subsection{Ng 2020 Hydrostatic water column on an elastic plate}
+\label{sec:hydrostatic-water-column-on-an-composite-elastic-plate}
+
+This has two simulations, one taken from \cite{ng2020coupled} and \cite{khayyer2021coupled}.
+\begin{table}[!ht]
+  \centering
+  \begin{tabular}[!ht]{ll}
+    % \toprule
+    Quantity & Values \\
+    % \midrule
+    $D$, Diameter & 2m \\
+    $\rho_0$, reference density & 1000kg/m\textsuperscript{3} \\
+    $c_s$ & 10m/s \\
+    $D/\Delta x_{\max}$, lowest resolution & 4 \\
+    $D/\Delta x_{\min} $, highest resolution & 160, 250, 500\\
+    $C_r$ & 1.08 \\
+    Reynolds number & 40, 550, 1000, 3000, and 9500 \\
+    Time of simulation & 6 \\
+    % \bottomrule
+  \end{tabular}
+  \caption{Parameters used for the flow past a circular cylinder problem.}%
+  \label{tab:fpc-params}
+\end{table}
+%
+%
+%
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=0.4\textwidth]{images/hydrostatic_water_column_on_an_elastic_plate/hydrostatic_water_column_on_an_elastic_plate}
+  \caption{Hydrostatic tank}
+\label{fig:hs-water-on-plate}
+\end{figure}
+%
+%
+
+
+\todoin{Comment on the Poisson ratio range of the current scheme}
+\todoin{Who did it previously}
+\todoin{How to derive the analytical solution in short}
+\todoin{Write about the different resolutions}
+\todoin{Any other artificial parameters regarding the scheme, alpha, beta}
+
+\todoin{In this problem we check the accuracy and stability-preserving property of the
+proposed scheme in handling the fluid structure interaction. This problem has
+been studied in Li et al. (2015), Fourey et al. (2017), Khayyer et
+al. (2018a), Hu et al. (2019), (2021), (2021) papers. This benchmark has an
+analytical solution derived in Li et al. (2015).}
+
+
+The first benchmark test to validate the fluid structure interaction model
+corresponds to an elastic plate under a hydrostatic water tank. An elastic
+plate of length 1m and width of 5cm is placed under a block of water column of
+height 2m is allowed to settle under gravity. The elastic plate is fixed on
+both the ends. The material properties of the water are as follows, the
+density is 1000 $kg/m^3$, viscosity of $1e-6$. And the material properties of
+the elastic plate are as follows, density 2700$kg/m^3$, Young's modulus
+$67.5 \times 10^7$ Pa and a Poisson ratio of 0.34. Three different particle
+spacing are considered. Initially the fluid is set up with a hydrostatic
+pressure distribution as in equation,
+%
+%
+\begin{equation}
+  f_a^F = -m_i \sum_{a} m_a \bigg(\frac{p_a}{\rho_{a}^2} +
+  \frac{p_i}{\rho_{i}^2} + \Pi_{ai} \bigg) \nabla_{a} W(x_{ai}).
+\end{equation}
+%
+%
+Once the plate reaches an equilibrium state, the
+deflection at the midpoint is compared with the analytical solution,
+%
+%
+\begin{equation}
+  f_a^F = -m_i \sum_{a} m_a \bigg(\frac{p_a}{\rho_{a}^2} +
+  \frac{p_i}{\rho_{i}^2} + \Pi_{ai} \bigg) \nabla_{a} W(x_{ai}).
+\end{equation}
+%
+%
+%
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=1\textwidth]{figures/khayyer_2021_hydrostatic_water_column_on_composite_elastic_plate/y_amplitude}
+  \caption{Hydrostatic tank}
+\label{fig:y-disp-hs-water-on-plate}
+\end{figure}
+%
+%
+\Cref{fig:y-disp-hs-water-on-plate} depicts the time histories of the plate's
+center point deflection with three different particle spacing. From the
+presented \Cref{fig:y-disp-hs-water-on-plate} and table \todoin{citetable} we
+can see as the particle spacing is reduced the numerical solution by the
+current model approaches the analytical model, which proves the convergence
+properties of the current scheme. \todoin{compare with other numerical schemes}
+%
+%
+%
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=1\textwidth]{figures/khayyer_2021_hydrostatic_water_column_on_composite_elastic_plate/y_amplitude}
+  \caption{Hydrostatic tank}
+\label{fig:p-hs-tank-elastic-plate}
+\end{figure}
+%
+%
+%
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=1\textwidth]{figures/khayyer_2021_hydrostatic_water_column_on_composite_elastic_plate/y_amplitude}
+  \caption{Hydrostatic tank}
+\label{fig:sigma-hs-tank-elastic-plate}
+\end{figure}
+
+\Cref{fig:p-hs-tank-elastic-plate} shows the pressure distribution in the
+fluid domain at different time histories. \Cref{fig:sigma-hs-water-on-plate}
+shows the plots of $\sigma_{00}$ distribution of the elastic plate at
+different time steps.
+
+\FloatBarrier%
+
+\subsection{Dam break with elastic gate}
+\label{sec:dam-break-elastic-gate}
+
+Taken from \citet{sun2019fully}.
+
+A block of fluid, which is suddenly released under gravity hits an elastic
+plate. This benchmark is simulated in many papers.
+
+The material properties of the elastic gate are as follows, and Young's
+modulus of $0.01 GPa$ with a Poisson ratio of $0.35$ and a density of
+$2500 kg/m^3$.
+
+The length of the fluid block is taken as $0.1m$, and the height is $0.3m$,
+and the length of the elastic gate is $0.03m$ with a height of $0.05m$ and is
+placed at a distance of $0.1m$ from the end of the fluid block.
+
+
+As the simulation starts the fluid starts flowing under the influence of
+gravity and after some time, it hits the elastic gate. Due to the influence of
+the fluid the elastic gate deforms and due to the elastic gate the fluid
+starts raising. The dynamics of both mediums is influenced by one another.
+
+
+We have compared the the tip of the elastic gate with time against the
+experimental results produced by \cite{xxx}. As can be seen the results
+produced by the current scheme are accurate and are able to reproduce the
+experimental results.
+
+
+
+\subsection{Water impact onto a forefront elastic plate}
+\label{sec:water-impact-forefront}
+
+In this example the elastic plate is placed at the end. Which gets
+impacted due to the moving fluid. Further information can be found at
+section 3.2 of \cite{liu2013numerical}, \citet{sun2019fully}.
+
+
+
+\subsection{Water slamming on a sandwich hull}
+\label{sec:water-slamming-on-a-sandwich-hull}
+
+Here we simulate a high speed elastic aluminum wedge impacting on undisturbed
+water surface. This benchmark was dealt in
+{A $\delta$ SPH-SPIM coupled method for fluid-structure interaction problems} and
+{abbas khayyer} papers.
+This is an attractive benchmark as it has an semi-analytical solution.
+
+A fluid of length 6 m and a height of 2.2 m is settled inside a tank of length
+6m and height 4m which gives rise to a pressure distribution of a hydrostatic
+tank. Into this hydrostatic tank a wedge of length 0.6m and a thickness of
+0.04m is been dropped with a velocity of 30 m/s. The wedge angle is 10
+degrees. Please see figure \ref{fig:half-wedge-deformable} for visual clarity.
+
+The initial particle spacing is set as 0.005m and the total number of
+particles combining the wedge, tank and fluid is TOBEDONE. The density of the
+fluid is taken as 1000 $kg/m^3$. The material properties of the wedge are as
+follows: density of 2700 $Kg/m^3$, Young's modulus of 6.75 1e10 $N/m^2$ and a
+Poisson ratio of 0.34. An artificial viscosity $alpha$ of 0.1 is used for
+fluids and 1 for solid phase.
+
+In figure \ref{wedge-entering-the-tank}, at different time stamps, we plot the
+pressure fields of water and sigma 00 if the flexible wedge. (We need to give
+some physical insight of what is expected and what is been observed, provided
+our simulations are correct)
+
+A total of three points are marked on the wedge for a qualitative validation.
+In figure \ref{point-A-wedge-displacement}, we plot the displacement of point
+A with time, and compared with Abbhas and and the semi analytical solution of
+scolon 2004. Similarly at point B and point C we compare the pressure of the
+current scheme with the one provided with Abbas and the semi analytical
+solution. It can be seen that the current scheme is able to produce the
+results with a reasonable accuracy.
+
+
+\subsection{High speed impact of an elastic aluminum wedge on undisturbed
+  water surface}
+\label{sec:wedge-impact-on-water}
+
+Here we simulate a high speed elastic aluminum wedge impacting on undisturbed
+water surface. This benchmark was dealt in
+{A $\delta$ SPH-SPIM coupled method for fluid-structure interaction problems} and
+{abbas khayyer} papers.
+This is an attractive benchmark as it has an semi-analytical solution.
+
+A fluid of length 6 m and a height of 2.2 m is settled inside a tank of length
+6m and height 4m which gives rise to a pressure distribution of a hydrostatic
+tank. Into this hydrostatic tank a wedge of length 0.6m and a thickness of
+0.04m is been dropped with a velocity of 30 m/s. The wedge angle is 10
+degrees. Please see figure \ref{fig:half-wedge-deformable} for visual clarity.
+
+The initial particle spacing is set as 0.005m and the total number of
+particles combining the wedge, tank and fluid is TOBEDONE. The density of the
+fluid is taken as 1000 $kg/m^3$. The material properties of the wedge are as
+follows: density of 2700 $Kg/m^3$, Young's modulus of 6.75 1e10 $N/m^2$ and a
+Poisson ratio of 0.34. An artificial viscosity $alpha$ of 0.1 is used for
+fluids and 1 for solid phase.
+
+In figure \ref{wedge-entering-the-tank}, at different time stamps, we plot the
+pressure fields of water and sigma 00 if the flexible wedge. (We need to give
+some physical insight of what is expected and what is been observed, provided
+our simulations are correct)
+
+A total of three points are marked on the wedge for a qualitative validation.
+In figure \ref{point-A-wedge-displacement}, we plot the displacement of point
+A with time, and compared with Abbhas and and the semi analytical solution of
+scolon 2004. Similarly at point B and point C we compare the pressure of the
+current scheme with the one provided with Abbas and the semi analytical
+solution. It can be seen that the current scheme is able to produce the
+results with a reasonable accuracy.
 
 
 

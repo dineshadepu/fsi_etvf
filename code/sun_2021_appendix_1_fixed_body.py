@@ -1,10 +1,8 @@
-"""A hydrostatic water column on an elastic plate
+"""
+Appendix 1
 
 https://www.sciencedirect.com/science/article/pii/S0029801820314608#appsec1
-
-Appendix A
 """
-
 import numpy as np
 
 from pysph.base.kernels import CubicSpline
@@ -15,7 +13,7 @@ from pysph.solver.application import Application
 from pysph.sph.scheme import SchemeChooser
 
 # from rigid_fluid_coupling import RigidFluidCouplingScheme
-from geometry import hydrostatic_tank_2d, create_tank_2d_from_block_2d
+# from geometry import hydrostatic_tank_2d, create_tank_2d_from_block_2d
 
 from pysph.examples.solid_mech.impact import add_properties
 # from pysph.examples.rigid_body.sphere_in_vessel_akinci import (create_boundary,
@@ -23,14 +21,17 @@ from pysph.examples.solid_mech.impact import add_properties
 #                                                                create_sphere)
 from pysph.tools.geometry import get_2d_block, rotate
 
-from fsi_coupling import FSIScheme
-from fsi_coupling_wcsph import FSIWCSPHScheme
-from fsi_substepping import FSISubSteppingScheme
+from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
 
 from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
+from pysph.tools.sph_evaluator import SPHEvaluator
+from pysph.sph.scheme import add_bool_argument
+
+from geometry import hydrostatic_tank_2d, create_tank_2d_from_block_2d
+from pysph.tools.geometry import (remove_overlap_particles)
 
 
 def get_hydrostatic_tank_with_fluid(fluid_length=1., fluid_height=2., tank_height=2.3,
@@ -92,91 +93,102 @@ def get_fixed_beam_no_clamp(beam_length, beam_height, beam_inside_length,
     return xb, yb, xs, ys
 
 
-class ElasticGate(Application):
+def find_displacement_index(pa):
+    x = pa.x
+    y = pa.y
+    max_x = max(x)
+    max_x_indices = np.where(x == max_x)[0]
+    index = max_x_indices[int(len(max_x_indices)/2)]
+    pa.add_property('tip_displacemet_index', type='int',
+                    data=np.zeros(len(pa.x)))
+    pa.tip_displacemet_index[index] = 1
+
+
+def set_normals_tank(pa, spacing):
+    min_x = min(pa.x)
+    max_x = max(pa.x)
+    min_y = min(pa.y)
+    # left wall
+    fltr = (pa.x < min_x + 3. * spacing) & (pa.y > min_y + 3. * spacing)
+    for i in range(len(fltr)):
+        if fltr[i] == True:
+            pa.normal[3*i] = 1.
+            pa.normal[3*i+1] = 0.
+            pa.normal[3*i+2] = 0.
+
+    # right wall
+    fltr = (pa.x > max_x - 3. * spacing) & (pa.y > min_y + 3. * spacing)
+    for i in range(len(fltr)):
+        if fltr[i] == True:
+            pa.normal[3*i] = -1.
+            pa.normal[3*i+1] = 0.
+            pa.normal[3*i+2] = 0.
+
+    # bottom wall
+    fltr = (pa.x > min_x + 5. * spacing) & (pa.x < max_x - 5. * spacing)
+    for i in range(len(fltr)):
+        if fltr[i] == True:
+            pa.normal[3*i] = 0.
+            pa.normal[3*i+1] = 1.
+            pa.normal[3*i+2] = 0.
+
+
+class BeamInQuiescentTank(Application):
     def add_user_options(self, group):
+        group.add_argument("--d0", action="store", type=float, dest="d0",
+                           default=0.005,
+                           help="Spacing between the particles")
+
         group.add_argument("--gate-rho", action="store", type=float, dest="gate_rho",
                            default=1500.,
                            help="Density of the gate (Defaults to 1500.)")
 
-        group.add_argument(
-            "--Vf", action="store", type=float, dest="Vf", default=0.05,
-            help="Velocity of the plate (Vf) (Defaults to 0.05)")
-
-        group.add_argument("--length", action="store", type=float,
-                           dest="length", default=0.1,
-                           help="Length of the plate")
-
-        group.add_argument("--height", action="store", type=float,
-                           dest="height", default=0.01,
-                           help="height of the plate")
-
-        group.add_argument("--deflection", action="store", type=float,
-                           dest="deflection", default=1e-4,
-                           help="Deflection of the plate")
-
-        group.add_argument("--N", action="store", type=int, dest="N",
-                           default=10,
-                           help="No of particles in the height direction")
-
-        group.add_argument("--final-force-time", action="store", type=float,
-                           dest="final_force_time", default=1e-3,
-                           help="Total time taken to apply the external load")
-
-        group.add_argument("--damping-c", action="store", type=float,
-                           dest="damping_c", default=0.1,
-                           help="Damping constant in damping force")
-
-        group.add_argument("--material", action="store", type=str,
-                           dest="material", default="steel",
-                           help="Material of the plate")
-
-        # add_bool_argument(group, 'shepard', dest='use_shepard_correction',
-        #                   default=False, help='Use shepard correction')
-
-        # add_bool_argument(group, 'bonet', dest='use_bonet_correction',
-        #                   default=False, help='Use Bonet and Lok correction')
-
-        # add_bool_argument(group, 'kgf', dest='use_kgf_correction',
-        #                   default=False, help='Use KGF correction')
-
     def consume_user_options(self):
-        self.dim = 2
+        # ================================================
+        # consume the user options first
+        # ================================================
+        self.d0 = self.options.d0
+        spacing = self.d0
 
         # ================================================
-        # properties related to the only fluids
+        # common properties
+        # ================================================
+        self.hdx = 1.0
+        self.gx = 0.
+        self.gy = -1.
+        self.gz = 0.
+        self.dim = 2
+        self.seval = None
+
+        # ================================================
+        # Fluid properties
         # ================================================
         self.fluid_length = 0.8
         self.fluid_height = 0.6
-        self.fluid_density = 1000.0
-
-        spacing = 0.02 / 4.
-        self.hdx = 1.0
-
         self.fluid_spacing = spacing
+        self.h_fluid = self.hdx * self.fluid_spacing
+        self.vref_fluid = np.sqrt(2 * 9.81 * self.fluid_height)
+        self.c0_fluid = 10 * self.vref_fluid
+        self.nu_fluid = 0.
+        self.rho0_fluid = 1000.0
+        self.fluid_density = self.rho0_fluid
+        self.mach_no_fluid = self.vref_fluid / self.c0_fluid
+        self.pb_fluid = self.rho0_fluid * self.c0_fluid**2.
+        self.alpha_fluid = 1.
+        self.edac_alpha = 0.5
+        self.edac_nu = self.edac_alpha * self.c0_fluid * self.h_fluid / 8
+        self.boundary_equations_1 = get_boundary_identification_etvf_equations(
+            destinations=["fluid"], sources=["fluid", "tank", "gate"],
+            boundaries=["tank", "gate"])
 
+        # ================================================
+        # Tank properties
+        # ================================================
         self.tank_height = 0.8
         self.tank_length = 0.6
         self.tank_layers = 3
         self.tank_spacing = spacing
-
-        self.h_fluid = self.hdx * self.fluid_spacing
-
-        # self.solid_rho = 500
-        # self.m = 1000 * self.dx * self.dx
-        self.vref_fluid = np.sqrt(2 * 9.81 * self.fluid_height)
-        self.u_max_fluid = self.vref_fluid
-        self.c0_fluid = 10 * self.vref_fluid
-        self.mach_no_fluid = self.vref_fluid / self.c0_fluid
-        self.p0_fluid = self.fluid_density * self.c0_fluid**2.
-        self.alpha = 0.1
-        self.gy = -1.
-
-        # for boundary particles
-        self.seval = None
-        self.boundary_equations_1 = get_boundary_identification_etvf_equations(
-            destinations=["fluid"], sources=["fluid", "tank", "gate"],
-            boundaries=["tank", "gate"])
-        # print(self.boundary_equations)
+        self.wall_layers = 2
 
         # ================================================
         # properties related to the elastic gate
@@ -185,43 +197,27 @@ class ElasticGate(Application):
         self.gate_length = 0.35
         self.gate_height = 0.02
         self.gate_spacing = self.fluid_spacing
-
         self.gate_rho0 = self.options.gate_rho
         self.gate_E = 1.4 * 1e6
         self.gate_nu = 0.4
-
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
-        # self.c0 = 5960
-        # print("speed of sound is")
-        # print(self.c0)
-        self.pb_gate = self.gate_rho0 * self.c0_gate**2
-
-        self.edac_alpha = 0.5
-
-        self.edac_nu = self.edac_alpha * self.c0_gate * self.h_fluid / 8
-
-        # attributes for Sun PST technique
-        # dummy value, will be updated in consume user options
-        self.u_max_gate = 13
+        self.u_max_gate = 0.004
         self.mach_no_gate = self.u_max_gate / self.c0_gate
-
-        # for pre step
-        # self.seval = None
-
-        # boundary equations
-        # self.boundary_equations = get_boundary_identification_etvf_equations(
-        #     destinations=["gate"], sources=["gate"])
+        self.alpha_solid = 1.
+        self.beta_solid = 0.
         self.boundary_equations_2 = get_boundary_identification_etvf_equations(
-            destinations=["gate"], sources=["gate"])
+            destinations=["gate"], sources=["gate"], boundaries=None)
 
         self.boundary_equations = self.boundary_equations_1 + self.boundary_equations_2
 
-        self.wall_layers = 2
+        # ================================================
+        # common properties
+        # ================================================
+        self.boundary_equations = (self.boundary_equations_1 +
+                                   self.boundary_equations_2)
 
-        self.artificial_stress_eps = 0.3
-
-        self.dt_fluid = 0.125 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
+        self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
         self.dt_solid = 0.25 * self.h_fluid / (
             (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
 
@@ -288,137 +284,68 @@ class ElasticGate(Application):
                 'spacing0': self.gate_spacing,
                 'rho_ref': self.gate_rho0
             })
-
-        # # ===================================
-        # # Create elastic gate support
-        # # ===================================
-        # gate_support = get_particle_array(
-        #     x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate_support",
-        #     constants={
-        #         'E': self.gate_E,
-        #         'n': 4.,
-        #         'nu': self.gate_nu,
-        #         'spacing0': self.gate_spacing,
-        #         'rho_ref': self.gate_rho0
-        #     })
+        # add post processing variables.
+        find_displacement_index(gate)
 
         self.scheme.setup_properties([fluid, tank, gate])
 
         gate.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
         gate.rho_fsi[:] = self.fluid_density
+        gate.m_frac[:] = gate.m_fsi[:] / gate.m[:]
 
-        # gate_support.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
-        # gate_support.rho_fsi[:] = self.fluid_density
-
-        # gate_support.x[:] -= max(gate_support.x) - min(gate.x) + self.fluid_spacing
-        # gate_support.y[:] += max(gate.y) - min(gate_support.y) - self.gate_height - 2. * self.fluid_spacing
-
-        # Remove the fluid particles which are intersecting the gate and
-        # gate_support
-        # collect the indices which are closer to the stucture
-        indices = []
-        min_xs = min(gate.x)
-        max_xs = max(gate.x)
-        min_ys = min(gate.y)
-        max_ys = max(gate.y)
-
-        xf = fluid.x
-        yf = fluid.y
-        for i in range(len(fluid.x)):
-            if xf[i] < max_xs + self.fluid_spacing / 2. and xf[i] > min_xs - self.fluid_spacing / 2.:
-                if yf[i] < max_ys + self.fluid_spacing / 2. and yf[i] > min_ys - self.fluid_spacing / 2.:
-                    indices.append(i)
-
-        fluid.remove_particles(indices)
+        remove_overlap_particles(fluid, gate, self.fluid_spacing)
 
         gate.x[:] += self.fluid_spacing/2.
+
+        gate.add_output_arrays(['tip_displacemet_index'])
+
+        # ================================
+        # set the normals of the tank
+        # ================================
+        set_normals_tank(tank, self.fluid_spacing)
 
         return [fluid, tank, gate]
 
     def create_scheme(self):
-        etvf = FSIScheme(fluids=['fluid'],
-                         solids=['tank'],
-                         structures=['gate'],
-                         structure_solids=None,
-                         dim=2,
-                         h_fluid=0.,
-                         rho0_fluid=0.,
-                         pb_fluid=0.,
-                         c0_fluid=0.,
-                         nu_fluid=0.,
-                         mach_no_fluid=0.,
-                         mach_no_structure=0.,
-                         gy=0.)
+        substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
+                                           solids=['tank'],
+                                           structures=['gate'],
+                                           structure_solids=None,
+                                           dim=2,
+                                           h_fluid=0.,
+                                           c0_fluid=0.,
+                                           nu_fluid=0.,
+                                           rho0_fluid=0.,
+                                           mach_no_fluid=0.,
+                                           mach_no_structure=0.)
 
-        substep = FSISubSteppingScheme(fluids=['fluid'],
-                                       solids=['tank'],
-                                       structures=['gate'],
-                                       structure_solids=None,
-                                       dt_fluid=self.dt_fluid,
-                                       dt_solid=self.dt_solid,
-                                       dim=2,
-                                       h_fluid=0.,
-                                       rho0_fluid=0.,
-                                       pb_fluid=0.,
-                                       c0_fluid=0.,
-                                       nu_fluid=0.,
-                                       mach_no_fluid=0.,
-                                       mach_no_structure=0.,
-                                       gy=0.)
-
-        wcsph = FSIWCSPHScheme(fluids=['fluid'],
-                               solids=['tank'],
-                               structures=['gate'],
-                               structure_solids=None,
-                               dim=2,
-                               h_fluid=0.,
-                               rho0_fluid=0.,
-                               pb_fluid=0.,
-                               c0_fluid=0.,
-                               nu_fluid=0.,
-                               mach_no_fluid=0.,
-                               mach_no_structure=0.,
-                               gy=0.)
-
-        s = SchemeChooser(default='etvf', etvf=etvf, wcsph=wcsph,
-                          substep=substep)
+        s = SchemeChooser(default='substep', substep=substep)
 
         return s
 
     def configure_scheme(self):
-        # dt = 0.125 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
-        # TODO: This has to be changed for solid
-        dt = 0.25 * self.h_fluid / (
-            (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
+        dt = self.dt_fluid
+        tf = 20.0
+        print("timestep is", dt)
 
-        print("DT: %s" % dt)
-        tf = 1
-
-        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=100)
+        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=2000)
 
         self.scheme.configure(
             dim=2,
             h_fluid=self.h_fluid,
-            rho0_fluid=self.fluid_density,
-            pb_fluid=self.p0_fluid,
+            rho0_fluid=self.rho0_fluid,
+            pb_fluid=self.pb_fluid,
             c0_fluid=self.c0_fluid,
             nu_fluid=0.0,
             mach_no_fluid=self.mach_no_fluid,
             mach_no_structure=self.mach_no_gate,
             gy=self.gy,
-            artificial_vis_alpha=1.,
-            alpha=0.1
+            alpha_fluid=1.,
+            alpha_solid=1.,
+            beta_solid=0,
+            dt_fluid=self.dt_fluid,
+            dt_solid=self.dt_solid
         )
-
-    def create_equations(self):
-        eqns = self.scheme.get_equations()
-
-        # if self.options.scheme == 'etvf':
-        #     equation = eqns.groups[-1][5].equations[4]
-        #     equation.sources = ["tank", "fluid", "gate", "gate_support"]
-        # # print(equation)
-
-        return eqns
 
     def _make_accel_eval(self, equations, pa_arrays):
         from pysph.base.kernels import (QuinticSpline)
@@ -448,40 +375,32 @@ class ElasticGate(Application):
 
     def post_process(self, fname):
         from pysph.solver.utils import iter_output, load
-        from pysph.solver.utils import get_files
-
-        files = get_files(fname)
-
-        data = load(files[0])
-        # solver_data = data['solver_data']
-        arrays = data['arrays']
-        pa = arrays['gate']
-        y_0 = pa.y[61]
-
-        files = files[0::10]
-        # print(len(files))
-        t, amplitude = [], []
-        for sd, gate in iter_output(files, 'gate'):
-            _t = sd['t']
-            t.append(_t)
-            amplitude.append((y_0 - gate.y[61]) * 1e5)
-
-        # matplotlib.use('Agg')
-
         import os
         from matplotlib import pyplot as plt
 
-        # res = os.path.join(self.output_dir, "results.npz")
-        # np.savez(res, t=t, amplitude=amplitude)
+        info = self.read_info(fname)
+        files = self.output_files
 
-        # gtvf data
-        # data = np.loadtxt('./oscillating_plate.csv', delimiter=',')
-        # t_gtvf, amplitude_gtvf = data[:, 0], data[:, 1]
+        data = load(files[0])
+        arrays = data['arrays']
+        pa = arrays['gate']
+        index = np.where(pa.tip_displacemet_index == 1)[0][0]
+        y_0 = pa.y[index]
+
+        files = files[0::1]
+        t_ctvf, amplitude_ctvf = [], []
+        for sd, gate in iter_output(files, 'gate'):
+            _t = sd['t']
+            t_ctvf.append(_t)
+            amplitude_ctvf.append((gate.y[index] - y_0) * 1)
+
+        res = os.path.join(self.output_dir, "results.npz")
+        np.savez(res,
+                 amplitude_ctvf=amplitude_ctvf,
+                 t_ctvf=t_ctvf)
 
         plt.clf()
-
-        # plt.plot(t_gtvf, amplitude_gtvf, "s-", label='GTVF Paper')
-        plt.plot(t, amplitude, "-", label='Simulated')
+        plt.plot(t_ctvf, amplitude_ctvf, "-", label='PySPH')
 
         plt.xlabel('t')
         plt.ylabel('amplitude')
@@ -489,10 +408,10 @@ class ElasticGate(Application):
         fig = os.path.join(os.path.dirname(fname), "amplitude_with_t.png")
         plt.savefig(fig, dpi=300)
 
+        plt.clf()
+
 
 if __name__ == '__main__':
-    app = ElasticGate()
+    app = BeamInQuiescentTank()
     app.run()
     app.post_process(app.info_filename)
-    # get_elastic_plate_with_support(1.0, 0.3, 2, 0.05)
-    # get_hydrostatic_tank_with_fluid()
