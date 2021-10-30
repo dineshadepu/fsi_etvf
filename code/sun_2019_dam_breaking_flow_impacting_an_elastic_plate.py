@@ -1,9 +1,27 @@
-"""
-A \delta SPH-SPIM coupled method for fluid-structure interaction problems
+"""[1] A fully Lagrangian method for fluid-structure interaction problems with
+deformable floating structure
 
-https://doi.org/10.1016/j.jfluidstructs.2020.103210
+https://doi.org/10.1016/j.jfluidstructs.2019.07.005
 
-Section 3.4 Dam-break flow impacting on an elastic plate
+Section 3.1.2: Water impact on a deformable obstruction
+
+
+[2] Numerical simulation of hydro-elastic problems with smoothed particle hydro-
+dynamics method
+
+DOI: 10.1016/S1001-6058(13)60412-6
+
+3.3 Water impact onto a forefront elastic plate
+
+
+[3] Unified Lagrangian formulation for elastic solids and incompressible fluids:
+Application to fluid-structure interaction problems via the PFEM
+
+https://doi.org/10.1016/j.cma.2007.06.004
+
+
+7.2 Impact of sea waves on solid object
+
 """
 
 import numpy as np
@@ -156,16 +174,17 @@ class Ng2020DamBreakWithAnElasticStructureDB2(Application):
         # ================================================
         # Fluid properties
         # ================================================
-        self.fluid_length = 0.2
-        self.fluid_height = 0.2
+        self.fluid_length = 0.146
+        self.fluid_height = 0.292
         self.fluid_spacing = spacing
         self.h_fluid = self.hdx * self.fluid_spacing
         self.vref_fluid = np.sqrt(2 * 9.81 * self.fluid_height)
+        self.u_max_fluid = np.sqrt(2 * 9.81 * self.fluid_height)
         self.c0_fluid = 10 * self.vref_fluid
         self.nu_fluid = 0.
-        self.rho0_fluid = 1000.0
+        self.fluid_density = 1000.0
         self.mach_no_fluid = self.vref_fluid / self.c0_fluid
-        self.pb_fluid = self.rho0_fluid * self.c0_fluid**2.
+        self.pb_fluid = self.fluid_density * self.c0_fluid**2.
         self.alpha_fluid = 0.1
         self.edac_alpha = 0.5
         self.edac_nu = self.edac_alpha * self.c0_fluid * self.h_fluid / 8
@@ -177,8 +196,8 @@ class Ng2020DamBreakWithAnElasticStructureDB2(Application):
         # ================================================
         # Tank properties
         # ================================================
-        self.tank_height = 0.4
-        self.tank_length = 0.8
+        self.tank_height = 0.32
+        self.tank_length = 0.584
         self.tank_layers = 3
         self.tank_spacing = spacing
         self.wall_layers = 3
@@ -187,12 +206,12 @@ class Ng2020DamBreakWithAnElasticStructureDB2(Application):
         # properties related to the elastic gate
         # ================================================
         # elastic gate is made of rubber
-        self.gate_length = 0.004
-        self.gate_height = 0.09
+        self.gate_length = 0.012
+        self.gate_height = 0.08
         self.gate_spacing = self.fluid_spacing
-        self.gate_rho0 = 1161.54
-        self.gate_E = 3.5 * 1e6
-        self.gate_nu = 0.45
+        self.gate_rho0 = 2500.
+        self.gate_E = 1e6
+        self.gate_nu = 0.0
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
         self.u_max_gate = self.u_max_fluid
@@ -211,7 +230,7 @@ class Ng2020DamBreakWithAnElasticStructureDB2(Application):
 
         self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
         self.dt_solid = 0.25 * self.h_fluid / (
-            (self.gate_E_A / self.gate_rho0)**0.5 + self.u_max_gate)
+            (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
 
     def create_particles(self):
         # ===================================
@@ -265,20 +284,20 @@ class Ng2020DamBreakWithAnElasticStructureDB2(Application):
                                                        self.wall_layers,
                                                        self.fluid_spacing)
         # move the wall onto the tank
-        scale = max(yw) - min(tank.y) - self.wall_layers * self.fluid_spacing
+        scale = max(yw) - min(tank.y) - (self.wall_layers - 1) * self.fluid_spacing
         yw -= scale
         yp -= scale
 
-        scale = min(xp) - min(fluid.x)
-        xp -= scale
-        xw -= scale
+        scale = max(fluid.x) - min(xp) + self.fluid_spacing
+        xp += scale
+        xw += scale
 
         m = self.gate_rho0 * self.fluid_spacing**2.
 
         # ===================================
         # Create elastic gate
         # ===================================
-        shift = 0.8 - 0.2 - 0.004
+        shift = 0.14 + self.fluid_spacing/2.
         xp += shift
         gate = get_particle_array(
             x=xp, y=yp, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate",
@@ -307,7 +326,7 @@ class Ng2020DamBreakWithAnElasticStructureDB2(Application):
         # ===========================
         # Adjust the geometry
         # ===========================
-        remove_overlap_particles(tank, gate_support, self.fluid_spacing)
+        remove_overlap_particles(tank, gate_support, self.fluid_spacing/2.)
 
         self.scheme.setup_properties([fluid, tank,
                                       gate, gate_support])
@@ -358,7 +377,7 @@ class Ng2020DamBreakWithAnElasticStructureDB2(Application):
         self.scheme.configure(
             dim=2,
             h_fluid=self.h_fluid,
-            rho0_fluid=self.rho0_fluid,
+            rho0_fluid=self.fluid_density,
             pb_fluid=self.pb_fluid,
             c0_fluid=self.c0_fluid,
             nu_fluid=0.0,
