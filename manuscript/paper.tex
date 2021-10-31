@@ -340,14 +340,6 @@ solution. It can be seen that the current scheme is able to produce the
 results with a reasonable accuracy.
 
 
-\subsection{Elastic bar hanging under gravity}
-\label{sec:elastic-bar-hanging}
-
-Currently this is a sub problem of elastic dam break. In that problem we are
-simulating gate with out considering the gravity. By considering the gravity
-we get float division error.
-
-
 
 \subsection{Ng 2020 Hydrostatic water column on an elastic plate}
 \label{sec:hydrostatic-water-column-on-an-composite-elastic-plate}
@@ -470,7 +462,7 @@ different time steps.
 \subsection{Dam break with elastic gate}
 \label{sec:dam-break-elastic-gate}
 
-Taken from \citet{sun2019fully}.
+Taken from \citet{sun2019fully, ng2020coupled}.
 
 A block of fluid, which is suddenly released under gravity hits an elastic
 plate. This benchmark is simulated in many papers.
@@ -500,46 +492,11 @@ experimental results.
 \subsection{Water impact onto a forefront elastic plate}
 \label{sec:water-impact-forefront}
 
-In this example the elastic plate is placed at the end. Which gets
-impacted due to the moving fluid. Further information can be found at
-section 3.2 of \cite{liu2013numerical}, \citet{sun2019fully}.
+In this example the elastic plate is placed at the end. Which gets impacted
+due to the moving fluid. Further information can be found at section 3.2 of
+\cite{liu2013numerical}, \citet{sun2019fully}, {A $\delta$ SPH-SPIM coupled
+  method for fluid-structure interaction problems}.
 
-
-
-\subsection{Water slamming on a sandwich hull}
-\label{sec:water-slamming-on-a-sandwich-hull}
-
-Here we simulate a high speed elastic aluminum wedge impacting on undisturbed
-water surface. This benchmark was dealt in
-{A $\delta$ SPH-SPIM coupled method for fluid-structure interaction problems} and
-{abbas khayyer} papers.
-This is an attractive benchmark as it has an semi-analytical solution.
-
-A fluid of length 6 m and a height of 2.2 m is settled inside a tank of length
-6m and height 4m which gives rise to a pressure distribution of a hydrostatic
-tank. Into this hydrostatic tank a wedge of length 0.6m and a thickness of
-0.04m is been dropped with a velocity of 30 m/s. The wedge angle is 10
-degrees. Please see figure \ref{fig:half-wedge-deformable} for visual clarity.
-
-The initial particle spacing is set as 0.005m and the total number of
-particles combining the wedge, tank and fluid is TOBEDONE. The density of the
-fluid is taken as 1000 $kg/m^3$. The material properties of the wedge are as
-follows: density of 2700 $Kg/m^3$, Young's modulus of 6.75 1e10 $N/m^2$ and a
-Poisson ratio of 0.34. An artificial viscosity $alpha$ of 0.1 is used for
-fluids and 1 for solid phase.
-
-In figure \ref{wedge-entering-the-tank}, at different time stamps, we plot the
-pressure fields of water and sigma 00 if the flexible wedge. (We need to give
-some physical insight of what is expected and what is been observed, provided
-our simulations are correct)
-
-A total of three points are marked on the wedge for a qualitative validation.
-In figure \ref{point-A-wedge-displacement}, we plot the displacement of point
-A with time, and compared with Abbhas and and the semi analytical solution of
-scolon 2004. Similarly at point B and point C we compare the pressure of the
-current scheme with the one provided with Abbas and the semi analytical
-solution. It can be seen that the current scheme is able to produce the
-results with a reasonable accuracy.
 
 
 \subsection{High speed impact of an elastic aluminum wedge on undisturbed

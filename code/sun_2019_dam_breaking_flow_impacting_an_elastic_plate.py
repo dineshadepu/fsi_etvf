@@ -22,6 +22,10 @@ https://doi.org/10.1016/j.cma.2007.06.004
 
 7.2 Impact of sea waves on solid object
 
+# Image for dimensions
+
+https://ars.els-cdn.com/content/image/1-s2.0-S0889974618308673-gr7_lrg.jpg
+
 """
 
 import numpy as np
