@@ -19,7 +19,6 @@ from boundary_particles import (add_boundary_identification_properties,
 from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
 from pysph.tools.geometry import get_2d_tank, get_2d_block
-from solid_mech_common import AddGravityToStructure
 from pysph.sph.scheme import add_bool_argument
 
 
@@ -103,63 +102,20 @@ def get_fixed_beam_no_clamp(beam_length, beam_height, beam_inside_length,
     return xb, yb, xs, ys
 
 
+def find_displacement_index(pa):
+    x = pa.x
+    y = pa.y
+    max_x = max(x)
+    max_x_indices = np.where(x == max_x)[0]
+    index = max_x_indices[int(len(max_x_indices)/2)]
+    pa.add_property('tip_displacemet_index', type='int',
+                    data=np.zeros(len(pa.x)))
+    pa.tip_displacemet_index[index] = 1
+    pa.add_output_arrays(['tip_displacemet_index'])
+
+
 class OscillatingPlate(Application):
-    def initialize(self):
-        # dummy value to make the scheme work
-        self.plate_rho0 = 1000.
-        self.plate_E = 1.4 * 1e6
-        self.plate_nu = 0.4
-        self.c0 = get_speed_of_sound(self.plate_E, self.plate_nu,
-                                     self.plate_rho0)
-        self.pb = self.plate_rho0 * self.c0**2
-
-        self.edac_alpha = 0.5
-        self.hdx = 1.2
-
-        # this is dummpy value
-        self.h = 0.001
-        self.edac_nu = self.edac_alpha * self.c0 * self.h / 8
-
-        # attributes for Sun PST technique
-        # dummy value, will be updated in consume user options
-        self.u_max = 2.8513
-        self.mach_no = self.u_max / self.c0
-
-        self.cylinder_r = 0.05
-
-        # for pre step
-        self.seval = None
-
-        # boundary equations
-        # self.boundary_equations = get_boundary_identification_etvf_equations(
-            # destinations=["plate"], sources=["plate"])
-        self.boundary_equations = get_boundary_identification_etvf_equations(
-            destinations=["plate"],
-            sources=["plate", "wall"],
-            boundaries=["wall"])
-
     def add_user_options(self, group):
-        group.add_argument("--rho",
-                           action="store",
-                           type=float,
-                           dest="rho",
-                           default=1000.,
-                           help="Density of the particle (Defaults to 1000.)")
-
-        group.add_argument("--length",
-                           action="store",
-                           type=float,
-                           dest="length",
-                           default=0.35,
-                           help="Length of the plate")
-
-        group.add_argument("--height",
-                           action="store",
-                           type=float,
-                           dest="height",
-                           default=0.02,
-                           help="height of the plate")
-
         group.add_argument("--N",
                            action="store",
                            type=int,
@@ -178,49 +134,57 @@ class OscillatingPlate(Application):
                            help="Amount of beam to be clamped")
 
     def consume_user_options(self):
-        self.rho = self.options.rho
-        self.L = self.options.length
-        self.H = self.options.height
         self.N = self.options.N
+        self.clamp = self.options.clamp
+        self.clamp_factor = self.options.clamp_factor
 
-        self.dx_plate = self.cylinder_r / self.N
-        # print("dx_plate[ is ]")
-        # print(self.dx_plate)
-        # self.fac = self.dx_plate / 2.
-        self.h = self.hdx * self.dx_plate
-        # print(self.h)
-        self.plate_rho0 = self.rho
+        # =============================
+        # general simulation parameters
+        # =============================
+        self.hdx = 1.2
+        self.dim = 2
+        self.seval = None  # for pre step
+        self.gx = 0.
+        self.gy = -2.
+        self.gz = 0.
 
-        self.wall_layers = 2
-
-        # compute the timestep
-        self.tf = 10.0
-        self.dt = 0.25 * self.h / (
-            (self.plate_E / self.plate_rho0)**0.5 + 2.85)
-        # self.dt = 0.5 * self.h / (
-        #     (self.plate_E / self.plate_rho0)**0.5 + 2.85)
-        # self.dt = 0.25 * self.h / (
-        #     (self.plate_E / self.plate_rho0)**0.5 + 2.85)
-
+        # ====================
+        # structure properties
+        # ====================
+        self.plate_rho0 = 1000.
+        self.plate_E = 1.4 * 1e6
+        self.plate_nu = 0.4
+        # attributes for Sun PST technique
         self.c0 = get_speed_of_sound(self.plate_E, self.plate_nu,
                                      self.plate_rho0)
         self.pb = self.plate_rho0 * self.c0**2
-        # self.pb = 0.
-        print("timestep is,", self.dt)
+        self.u_max = 2.8513
+        self.mach_no = self.u_max / self.c0
+        self.L = 0.35
+        self.H = 0.02
+        self.dx_plate = self.H / self.N
+        self.h = self.hdx * self.dx_plate
+        # boundary equations
+        if self.options.wall_pst is True:
+            self.boundary_equations = get_boundary_identification_etvf_equations(
+                destinations=["plate"],
+                sources=["plate", "wall"],
+                boundaries=["wall"])
+        else:
+            self.boundary_equations = get_boundary_identification_etvf_equations(
+                destinations=["plate"],
+                sources=["plate"],
+                boundaries=None)
 
-        self.dim = 2
+        # ===============
+        # wall properties
+        # ===============
+        self.wall_layers = 2
 
-        # self.alpha = 0.
-        # self.beta = 0.
-
-        self.artificial_stress_eps = 0.3
-
-        # edac constants
-        self.edac_alpha = 0.5
-        self.edac_nu = self.edac_alpha * self.c0 * self.h / 8
-
-        self.clamp = self.options.clamp
-        self.clamp_factor = self.options.clamp_factor
+        # compute the timestep
+        self.tf = 10.
+        self.dt = 0.25 * self.h / (
+            (self.plate_E / self.plate_rho0)**0.5 + 2.85)
 
     def create_particles(self):
         if self.clamp is True:
@@ -250,13 +214,13 @@ class OscillatingPlate(Application):
                                    m=m,
                                    h=self.h,
                                    rho=self.plate_rho0,
+                                   E=self.plate_E,
+                                   nu=self.plate_nu,
+                                   rho_ref=self.plate_rho0,
                                    name="plate",
                                    constants={
-                                       'E': self.plate_E,
                                        'n': 4,
-                                       'nu': self.plate_nu,
                                        'spacing0': self.dx_plate,
-                                       'rho_ref': self.plate_rho0
                                    })
 
         # create the particle array
@@ -265,30 +229,19 @@ class OscillatingPlate(Application):
                                   m=m,
                                   h=self.h,
                                   rho=self.plate_rho0,
+                                  E=self.plate_E,
+                                  nu=self.plate_nu,
+                                  rho_ref=self.plate_rho0,
                                   name="wall",
                                   constants={
-                                      'E': self.plate_E,
                                       'n': 4,
-                                      'nu': self.plate_nu,
                                       'spacing0': self.dx_plate,
-                                      'rho_ref': self.plate_rho0
                                   })
 
         self.scheme.setup_properties([wall, plate])
 
-        xp_max = max(xp)
-        fltr = np.argwhere(xp == xp_max)
-        fltr_idx = int(len(fltr) / 2.)
-        amplitude_idx = fltr[fltr_idx][0]
-
-        plate.add_constant("amplitude_idx", amplitude_idx)
-
-        if self.clamp is True:
-            if self.N == 25:
-                plate.amplitude_idx[0] = 2700
-                if self.clamp_factor == 8:
-                    print("here")
-                    plate.amplitude_idx[0] = 2161
+        # add post processing variables.
+        find_displacement_index(plate)
 
         ##################################
         # Add output arrays
@@ -302,33 +255,18 @@ class OscillatingPlate(Application):
         tf = self.tf
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=500)
 
+        scheme = self.scheme
+        scheme.configure(mach_no=self.mach_no, gy=self.gy)
+
     def create_scheme(self):
         solid = SolidsScheme(solids=['plate'],
                              boundaries=['wall'],
                              dim=2,
-                             pb=self.pb,
-                             edac_nu=self.edac_nu,
-                             mach_no=self.mach_no,
-                             hdx=self.hdx,
-                             gy=-2)
+                             mach_no=1.,
+                             gy=0.)
 
         s = SchemeChooser(default='solid', solid=solid)
         return s
-
-    # def create_equations(self):
-    #     eqns = self.scheme.get_equations()
-
-    #     g9 = []
-    #     g9.append(AddGravityToStructure(dest="plate", sources=None,
-    #                                     gx=0.,
-    #                                     gy=2.,
-    #                                     gz=0.))
-
-    #     # equation = eqns.groups[-1][4].equations[3]
-    #     eqns.groups[-1].append(Group(equations=g9))
-    #     print(eqns)
-
-    #     return eqns
 
     def _make_accel_eval(self, equations, pa_arrays):
         if self.seval is None:
@@ -357,53 +295,51 @@ class OscillatingPlate(Application):
                 a_eval.evaluate(t, dt)
 
     def post_process(self, fname):
-        from pysph.solver.utils import iter_output
+        from pysph.solver.utils import iter_output, load
         from pysph.solver.utils import get_files
-
-        files = get_files(fname)
-
-        t, x_amplitude, y_amplitude = [], [], []
-        for sd, array in iter_output(files, 'plate'):
-            _t = sd['t']
-            t.append(_t)
-            x_amplitude.append(array.x[array.amplitude_idx[0]])
-            y_amplitude.append(array.y[array.amplitude_idx[0]])
-
-        import matplotlib
         import os
-        matplotlib.use('Agg')
 
-        from matplotlib import pyplot as plt
+        info = self.read_info(fname)
+        files = self.output_files
 
-        if "info" in fname:
-            res = os.path.join(os.path.dirname(fname), "results.npz")
-        else:
-            res = os.path.join(fname, "results.npz")
+        data = load(files[0])
+        # solver_data = data['solver_data']
+        arrays = data['arrays']
+        pa = arrays['plate']
+        index = np.where(pa.tip_displacemet_index == 1)[0][0]
+        print("index is", index)
+        y_0 = pa.y[index]
 
-        # np.savez(res, t=t,  x_ampiltude=x_amplitude, y_ampiltude=y_amplitude)
+        files = files[0::1]
+        # print(len(files))
+        t_ctvf, amplitude_ctvf = [], []
+        for sd, plate in iter_output(files, 'plate'):
+            _t = sd['t']
+            t_ctvf.append(_t)
+            amplitude_ctvf.append((plate.y[index] - y_0))
 
-        # gtvf data
         path = os.path.abspath(__file__)
         directory = os.path.dirname(path)
-
         data = np.loadtxt(os.path.join(directory, 'turek_fem_y_data.csv'),
                           delimiter=',')
         t_fem, amplitude_fem = data[:, 0], data[:, 1]
 
-        np.savez(res, t=t,  x_ampiltude=x_amplitude, y_amplitude=y_amplitude,
-                 t_fem=t_fem,  y_amplitude_fem=amplitude_fem)
+        res = os.path.join(os.path.dirname(fname), "results.npz")
+        # res = os.path.join(fname, "results.npz")
+        np.savez(res, amplitude_ctvf=amplitude_ctvf, t_ctvf=t_ctvf,
+                 t_fem=t_fem, y_amplitude_fem=amplitude_fem)
+
+        from matplotlib import pyplot as plt
 
         plt.clf()
+        plt.scatter(t_fem, amplitude_fem, label='analytical')
+        plt.plot(t_ctvf, amplitude_ctvf, "-", label='Simulated')
 
-        plt.scatter(t_fem, amplitude_fem, label='FEM')
-        plt.plot(t, y_amplitude, "-r", label='Simulated')
-
-        # print("heeee haaaa")
         plt.xlabel('t')
-        plt.ylabel('Amplitude')
+        plt.ylabel('amplitude')
+        # plt.ylim(-5 * 1e-5, 0.0)
         plt.legend()
-        fig = os.path.join(os.path.dirname(fname), "amplitude.png")
-        # print(fig)
+        fig = os.path.join(os.path.dirname(fname), "amplitude_with_t.png")
         plt.savefig(fig, dpi=300)
 
 

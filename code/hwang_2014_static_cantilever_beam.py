@@ -12,7 +12,7 @@ from pysph.sph.equation import Equation
 
 from pysph.base.utils import get_particle_array
 
-from solid_mech_ctvf import SolidsSchemeCTVF
+from solid_mech import SolidsScheme
 
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
@@ -20,7 +20,6 @@ from boundary_particles import (add_boundary_identification_properties,
 from pysph.sph.solid_mech.basic import (get_speed_of_sound, get_bulk_mod,
                                         get_shear_modulus)
 from pysph.tools.geometry import get_2d_tank, get_2d_block
-from solid_mech_common import AddGravityToStructure
 from pysph.sph.scheme import add_bool_argument
 from force_application_utils import (ApplyForceGradual, ApplyForceSudden,
                                      setup_properties_for_gradual_force,
@@ -149,34 +148,6 @@ def find_displacement_index(pa):
 
 
 class StaticCantileverBeamUnderTipLoad(Application):
-    def initialize(self):
-        # dummy value to make the scheme work
-        self.plate_rho0 = 1000.
-        self.plate_E = 1. * 1e5
-        self.plate_nu = 0.3
-        self.c0 = get_speed_of_sound(self.plate_E, self.plate_nu,
-                                     self.plate_rho0)
-        self.pb = self.plate_rho0 * self.c0**2
-
-        self.edac_alpha = 0.5
-        self.hdx = 1.2
-
-        # this is dummpy value
-        self.h = 0.001
-        self.edac_nu = self.edac_alpha * self.c0 * self.h / 8
-
-        # attributes for Sun PST technique
-        # dummy value, will be updated in consume user options
-        self.u_max = 2.8513
-        self.mach_no = self.u_max / self.c0
-
-        # self.mach_no = 100 / self.c0
-
-        self.cylinder_r = 0.05
-
-        # for pre step
-        self.seval = None
-
     def add_user_options(self, group):
         group.add_argument("--N",
                            action="store",
@@ -195,9 +166,6 @@ class StaticCantileverBeamUnderTipLoad(Application):
                            default=2.5,
                            help="Amount of beam to be clamped")
 
-        add_bool_argument(group, 'wall-pst', dest='wall_pst',
-                          default=False, help='Add wall as PST source')
-
         add_bool_argument(group, 'gradual-force', dest='gradual_force',
                           default=True, help='Apply gradual force')
 
@@ -215,19 +183,52 @@ class StaticCantileverBeamUnderTipLoad(Application):
         self.N = self.options.N
         self.clamp = self.options.clamp
         self.clamp_factor = self.options.clamp_factor
-        self.wall_pst = self.options.wall_pst
         self.gradual_force = self.options.gradual_force
         self.gradual_force_time = self.options.gradual_force_time
         self.distributed_load = self.options.distributed_load
 
-        self.rho = 1000.
+        # =============================
+        # general simulation parameters
+        # =============================
+        self.hdx = 1.2
+        self.dim = 2
+        self.seval = None  # for pre step
+        self.gx = 0.
+        self.gy = 0.
+        self.gz = 0.
+
+        # ====================
+        # structure properties
+        # ====================
+        self.plate_rho0 = 1000.
+        self.plate_E = 1. * 1e5
+        self.plate_nu = 0.3
+        # attributes for Sun PST technique
+        self.c0 = get_speed_of_sound(self.plate_E, self.plate_nu,
+                                     self.plate_rho0)
         self.L = 0.35
         self.H = 0.02
-
         self.dx_plate = self.H / self.N
         self.h = self.hdx * self.dx_plate
-        self.plate_rho0 = self.rho
+        # CTVF Scheme specific variables for the structure
+        # boundary equations
+        self.u_max = 2.8513
+        self.mach_no = self.u_max / self.c0
+        if self.options.wall_pst is True:
+            self.boundary_equations = get_boundary_identification_etvf_equations(
+                destinations=["plate"],
+                sources=["plate", "wall"],
+                boundaries=["wall"])
+        else:
+            self.boundary_equations = get_boundary_identification_etvf_equations(
+                destinations=["plate"],
+                sources=["plate"],
+                boundaries=None)
 
+        # ===============
+        # wall properties
+        # ===============
+        self.cylinder_r = 0.05
         self.wall_layers = 2
 
         # compute the timestep
@@ -235,22 +236,9 @@ class StaticCantileverBeamUnderTipLoad(Application):
         self.dt = 0.25 * self.h / (
             (self.plate_E / self.plate_rho0)**0.5 + 2.85)
 
-        self.c0 = get_speed_of_sound(self.plate_E, self.plate_nu,
-                                     self.plate_rho0)
-        self.pb = self.plate_rho0 * self.c0**2
-
-        self.dim = 2
-
-        self.artificial_stress_eps = 0.3
-
-        # edac constants
-        self.edac_alpha = 0.5
-        self.edac_nu = self.edac_alpha * self.c0 * self.h / 8
-
-        self.clamp = self.options.clamp
-        self.wall_pst = self.options.wall_pst
-        self.clamp_factor = self.options.clamp_factor
-
+        # ===========================
+        # problem specific parameters
+        # ===========================
         self.fx = 0.
         self.fy = -0.005
         self.fz = 0.
@@ -277,18 +265,6 @@ class StaticCantileverBeamUnderTipLoad(Application):
             self.fy = -0.005 / (self.N + 1)
             self.fz = 0.
 
-        # boundary equations
-        if self.wall_pst is True:
-            self.boundary_equations = get_boundary_identification_etvf_equations(
-                destinations=["plate"],
-                sources=["plate", "wall"],
-                boundaries=["wall"])
-        else:
-            self.boundary_equations = get_boundary_identification_etvf_equations(
-                destinations=["plate"],
-                sources=["plate"],
-                boundaries=None)
-
     def create_particles(self):
         if self.clamp is True:
             xp, yp, xw, yw = get_fixed_beam_no_clamp(self.L, self.H, 2. * self.H,
@@ -310,13 +286,13 @@ class StaticCantileverBeamUnderTipLoad(Application):
                                    m=m,
                                    h=self.h,
                                    rho=self.plate_rho0,
+                                   E=self.plate_E,
+                                   nu=self.plate_nu,
+                                   rho_ref=self.plate_rho0,
                                    name="plate",
                                    constants={
-                                       'E': self.plate_E,
                                        'n': 4,
-                                       'nu': self.plate_nu,
                                        'spacing0': self.dx_plate,
-                                       'rho_ref': self.plate_rho0
                                    })
 
         # create the particle array
@@ -325,13 +301,13 @@ class StaticCantileverBeamUnderTipLoad(Application):
                                   m=m,
                                   h=self.h,
                                   rho=self.plate_rho0,
+                                  E=self.plate_E,
+                                  nu=self.plate_nu,
+                                  rho_ref=self.plate_rho0,
                                   name="wall",
                                   constants={
-                                      'E': self.plate_E,
                                       'n': 4,
-                                      'nu': self.plate_nu,
                                       'spacing0': self.dx_plate,
-                                      'rho_ref': self.plate_rho0
                                   })
 
         self.scheme.setup_properties([wall, plate])
@@ -364,25 +340,22 @@ class StaticCantileverBeamUnderTipLoad(Application):
         tf = self.tf
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=500)
 
+        scheme = self.scheme
+        scheme.configure(mach_no=self.mach_no, gy=self.gy)
+
     def create_scheme(self):
-        solid = SolidsSchemeCTVF(solids=['plate'],
-                                 boundaries=['wall'],
-                                 dim=2,
-                                 pb=self.pb,
-                                 edac_nu=self.edac_nu,
-                                 mach_no=self.mach_no,
-                                 hdx=self.hdx,
-                                 gy=0)
+        # the scheme parameters are dummy and reinitialized in configure_scheme
+        solid = SolidsScheme(solids=['plate'],
+                             boundaries=['wall'],
+                             dim=2,
+                             mach_no=1.,
+                             gy=0)
 
         s = SchemeChooser(default='solid', solid=solid)
         return s
 
     def create_equations(self):
         eqns = self.scheme.get_equations()
-
-        if self.wall_pst is False:
-            equation = eqns.groups[-1][2].equations[2]
-            equation.sources = ["plate"]
 
         # Apply external force
         force_eqs = []

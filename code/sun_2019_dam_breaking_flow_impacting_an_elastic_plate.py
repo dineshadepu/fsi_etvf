@@ -153,7 +153,17 @@ def get_fixed_beam_with_out_clamp(beam_length, beam_height, beam_inside_length,
     return xb, yb, xs, ys
 
 
-class Ng2020DamBreakWithAnElasticStructureDB2(Application):
+def find_displacement_index(pa):
+    y = pa.y
+    max_y = max(y)
+    max_y_indices = np.where(y == max_y)[0]
+    index = max_y_indices[int(len(max_y_indices)/2)]
+    pa.add_property('tip_displacemet_index', type='int',
+                    data=np.zeros(len(pa.x)))
+    pa.tip_displacemet_index[index] = 1
+
+
+class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
     def add_user_options(self, group):
         group.add_argument("--d0", action="store", type=float, dest="d0",
                            default=1e-3,
@@ -305,26 +315,26 @@ class Ng2020DamBreakWithAnElasticStructureDB2(Application):
         xp += shift
         gate = get_particle_array(
             x=xp, y=yp, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate",
+            E=self.gate_E, nu=self.gate_nu, rho_ref=self.gate_rho0,
             constants={
-                'E': self.gate_E,
                 'n': 4.,
-                'nu': self.gate_nu,
                 'spacing0': self.gate_spacing,
-                'rho_ref': self.gate_rho0
             })
+        # add post processing variables.
+        find_displacement_index(gate)
+        gate.add_output_arrays(['tip_displacemet_index'])
 
         # ===================================
         # Create elastic gate support
         # ===================================
         xw += shift
         gate_support = get_particle_array(
-            x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate_support",
+            x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0,
+            name="gate_support", E=self.gate_E, nu=self.gate_nu,
+            rho_ref=self.gate_rho0,
             constants={
-                'E': self.gate_E,
                 'n': 4.,
-                'nu': self.gate_nu,
                 'spacing0': self.gate_spacing,
-                'rho_ref': self.gate_rho0
             })
 
         # ===========================
@@ -431,8 +441,115 @@ class Ng2020DamBreakWithAnElasticStructureDB2(Application):
             # When
             a_eval.evaluate(t, dt)
 
+    def post_process(self, fname):
+        from pysph.solver.utils import iter_output, load
+        import os
+        from matplotlib import pyplot as plt
+
+        info = self.read_info(fname)
+        files = self.output_files
+
+        data = load(files[0])
+        arrays = data['arrays']
+        pa = arrays['gate']
+        index = np.where(pa.tip_displacemet_index == 1)[0][0]
+        y_0 = pa.y[index]
+        x_0 = pa.x[index]
+
+        t_ctvf, y_ctvf, x_ctvf = [], [], []
+        for sd, gate in iter_output(files[::5], 'gate'):
+            _t = sd['t']
+            t_ctvf.append(_t)
+            y_ctvf.append(gate.y[index] - y_0)
+            x_ctvf.append(gate.x[index] - x_0)
+
+        # # gtvf data
+        # path = os.path.abspath(__file__)
+        # directory = os.path.dirname(path)
+
+        # # load the data
+        # data_x_disp_antoci_exp = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_antoci_2007_experiment.csv'),
+        #                                     delimiter=',')
+        # data_x_disp_khayyer_2018 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_khayyer_2018_isph_sph.csv'),
+        #                                       delimiter=',')
+        # data_x_disp_yang_2012 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_yang_2012_sph_fem.csv'),
+        #                                    delimiter=',')
+        # data_x_disp_ng_2020 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_ng_2020_sph_vcpm_alpha_1.csv'),
+        #                                  delimiter=',')
+        # data_x_disp_wcsph_pysph = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_wcsph_pysph.csv'),
+        #                                      delimiter=',')
+
+        # data_y_disp_antoci_exp = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_antoci_2007_experiment.csv'),
+        #                                     delimiter=',')
+        # data_y_disp_khayyer_2018 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_khayyer_2018_isph_sph.csv'),
+        #                                       delimiter=',')
+        # data_y_disp_yang_2012 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_yang_2012_sph_fem.csv'),
+        #                                    delimiter=',')
+        # data_y_disp_ng_2020 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_ng_2020_sph_vcpm_alpha_1.csv'),
+        #                                  delimiter=',')
+
+        # txant, xdant = data_x_disp_antoci_exp[:, 0], data_x_disp_antoci_exp[:, 1]
+        # txkha, xdkha = data_x_disp_khayyer_2018[:, 0], data_x_disp_khayyer_2018[:, 1]
+        # txyan, xdyan = data_x_disp_yang_2012[:, 0], data_x_disp_yang_2012[:, 1]
+        # txng, xdng = data_x_disp_ng_2020[:, 0], data_x_disp_ng_2020[:, 1]
+        # txwcsph, xdwcsph = data_x_disp_wcsph_pysph[:, 0], data_x_disp_wcsph_pysph[:, 1]
+        # txwcsph += 0.05
+
+        # tyant, ydant = data_y_disp_antoci_exp[:, 0], data_y_disp_antoci_exp[:, 1]
+        # tykha, ydkha = data_y_disp_khayyer_2018[:, 0], data_y_disp_khayyer_2018[:, 1]
+        # tyyan, ydyan = data_y_disp_yang_2012[:, 0], data_y_disp_yang_2012[:, 1]
+        # tyng, ydng = data_y_disp_ng_2020[:, 0], data_y_disp_ng_2020[:, 1]
+
+        # res = os.path.join(self.output_dir, "results.npz")
+        # np.savez(res, txant=txant, xdant=xdant, txkha=txkha, xdkha=xdkha,
+        #          txyan=txyan, xdyan=xdyan, txng=txng, xdng=xdng, tyant=tyant,
+        #          ydant=ydant, tykha=tykha, ydkha=ydkha, tyyan=tyyan,
+        #          ydyan=ydyan, tyng=tyng, ydng=ydng, txwcsph=txwcsph,
+        #          xdwcsph=xdwcsph, t_ctvf=t_ctvf, x_ctvf=x_ctvf, y_ctvf=y_ctvf)
+
+        # ========================
+        # x amplitude figure
+        # ========================
+        plt.clf()
+        # plt.plot(txant, xdant, "o", label='Antoci 2008, Experiment')
+        # plt.plot(txkha, xdkha, "^", label='Khayyer 2018, ISPH-SPH')
+        # plt.plot(txyan, xdyan, "+", label='Yang 2012, SPH-FEM')
+        # plt.plot(txng, xdng, "v", label='Ng 2020, SPH-VCPM')
+        # plt.plot(txwcsph, xdwcsph, "*", label='WCSPH PySPH')
+        plt.plot(t_ctvf, x_ctvf, "-", label='CTVF')
+
+        plt.title('x amplitude')
+        plt.xlabel('t')
+        plt.ylabel('x amplitude')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "x_amplitude_with_t.png")
+        plt.savefig(fig, dpi=300)
+        # ========================
+        # x amplitude figure
+        # ========================
+
+        # ========================
+        # y amplitude figure
+        # ========================
+        plt.clf()
+        # plt.plot(tyant, ydant, "o", label='Antoci 2008, Experiment')
+        # plt.plot(tykha, ydkha, "v", label='Khayyer 2018, ISPH-SPH')
+        # plt.plot(tyyan, ydyan, "o", label='Yang 2012, SPH-FEM')
+        # plt.plot(tyng, ydng, "o", label='Ng 2020, SPH-VCPM')
+        plt.plot(t_ctvf, y_ctvf, "-", label='CTVF')
+
+        plt.title('y amplitude')
+        plt.xlabel('t')
+        plt.ylabel('y amplitude')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "y_amplitude_with_t.png")
+        plt.savefig(fig, dpi=300)
+        # ========================
+        # y amplitude figure
+        # ========================
+
 
 if __name__ == '__main__':
-    app = Ng2020DamBreakWithAnElasticStructureDB2()
+    app = Sun2019DamBreakingFLowImpactingAnElasticPlate()
     app.run()
-    # app.post_process(app.info_filename)
+    app.post_process(app.info_filename)

@@ -736,67 +736,6 @@ class SubSteppingIntegrator(Integrator):
         self.compute_accelerations()
 
 
-# Continuity Equation for WCSPH part for fluids
-class FluidContinuityEquationWCSPH(Equation):
-    def initialize(self, d_arho, d_idx):
-        d_arho[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, s_m, d_rho, s_rho, d_u, d_v,
-             d_w, s_u, s_v, s_w, d_arho, DWIJ):
-        uij = d_u[d_idx] - s_u[s_idx]
-        vij = d_v[d_idx] - s_v[s_idx]
-        wij = d_w[d_idx] - s_w[s_idx]
-
-        udotdij = DWIJ[0]*uij + DWIJ[1]*vij + DWIJ[2]*wij
-        fac = d_rho[d_idx] * s_m[s_idx] / s_rho[s_idx]
-        d_arho[d_idx] += fac * udotdij
-
-
-class FluidContinuityEquationWCSPHSolid(Equation):
-    def initialize(self, d_arho, d_idx):
-        d_arho[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, s_m, d_rho, s_rho, d_u, d_v,
-             d_w, s_ugfs, s_vgfs, s_wgfs, d_arho, DWIJ):
-        uij = d_u[d_idx] - s_ugfs[s_idx]
-        vij = d_v[d_idx] - s_vgfs[s_idx]
-        wij = d_w[d_idx] - s_wgfs[s_idx]
-
-        udotdij = DWIJ[0]*uij + DWIJ[1]*vij + DWIJ[2]*wij
-        fac = d_rho[d_idx] * s_m[s_idx] / s_rho[s_idx]
-        d_arho[d_idx] += fac * udotdij
-
-
-class FluidContinuityEquationWCSPHFSI(Equation):
-    def initialize(self, d_arho, d_idx):
-        d_arho[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, s_m_fsi, d_rho, s_rho_fsi, d_uhat, d_vhat,
-             d_what, s_uhat, s_vhat, s_what, d_arho, DWIJ):
-        uhatij = d_uhat[d_idx] - s_uhat[s_idx]
-        vhatij = d_vhat[d_idx] - s_vhat[s_idx]
-        whatij = d_what[d_idx] - s_what[s_idx]
-
-        udotdij = DWIJ[0]*uhatij + DWIJ[1]*vhatij + DWIJ[2]*whatij
-        fac = d_rho[d_idx] * s_m_fsi[s_idx] / s_rho_fsi[s_idx]
-        d_arho[d_idx] += fac * udotdij
-
-
-class FluidContinuityEquationWCSPHFSISolid(Equation):
-    def initialize(self, d_arho, d_idx):
-        d_arho[d_idx] = 0.0
-
-    def loop(self, d_idx, s_idx, s_m_fsi, d_rho, s_rho_fsi, d_uhat, d_vhat,
-             d_what, s_uhat, s_vhat, s_what, d_arho, DWIJ):
-        uhatij = d_uhat[d_idx] - s_uhat[s_idx]
-        vhatij = d_vhat[d_idx] - s_vhat[s_idx]
-        whatij = d_what[d_idx] - s_what[s_idx]
-
-        udotdij = DWIJ[0]*uhatij + DWIJ[1]*vhatij + DWIJ[2]*whatij
-        fac = d_rho[d_idx] * s_m_fsi[s_idx] / s_rho_fsi[s_idx]
-        d_arho[d_idx] += fac * udotdij
-
-
 class FSIETVFScheme(Scheme):
     def __init__(self, fluids, structures, solids, structure_solids, dim,
                  h_fluid, c0_fluid, nu_fluid, rho0_fluid, mach_no_fluid,
@@ -833,6 +772,10 @@ class FSIETVFScheme(Scheme):
             Coefficient for artificial viscosity for solid.
         edac: bool
             Use edac equation for fluid
+        damping: bool
+            Use damping for the elastic structure part
+        damping_coeff: float
+            The damping coefficient for the elastic structure
         """
         self.fluids = fluids
         self.solids = solids
@@ -861,14 +804,13 @@ class FSIETVFScheme(Scheme):
         self.edac_alpha = edac_alpha
         self.pst = pst
         self.edac = edac
-        self.visc_to_solids = False
-        self.rogers_eqns = False
-        self.wcsph_fluids = False
-        self.wcsph_structures = False
+        self.wall_pst = True
+        self.damping = False
+        self.damping_coeff = 0.002
 
         # common properties
         self.solver = None
-        self.kernel_factor = 3
+        self.kernel_factor = 2
 
         self.attributes_changed()
 
@@ -892,34 +834,27 @@ class FSIETVFScheme(Scheme):
                            dest="edac_alpha", default=None,
                            help="Alpha for the EDAC scheme viscosity.")
 
+        add_bool_argument(group, 'wall-pst', dest='wall_pst',
+                          default=True, help='Add wall as PST source')
+
+        add_bool_argument(group, 'damping',
+                          dest='damping',
+                          default=False,
+                          help='Use damping')
+
+        group.add_argument("--damping-coeff", action="store",
+                           dest="damping_coeff", default=0.000, type=float,
+                           help="Damping coefficient for Bui")
+
         choices = ['sun2019', 'gtvf']
         group.add_argument(
             "--pst", action="store", dest='pst', default="sun2019",
             choices=choices,
             help="Specify what PST to use (one of %s)." % choices)
 
-        add_bool_argument(group, 'visc-to-solids', dest='visc_to_solids',
-                          default=False,
-                          help='Apply artificial viscous force to solids')
-
-        add_bool_argument(group, 'rogers-eqns', dest='rogers_eqns',
-                          default=False,
-                          help='Use Bendict and Connor equations')
-
-        add_bool_argument(group, 'wcsph-fluids', dest='wcsph_fluids',
-                          default=False,
-                          help='Use wcsph fluids formulation')
-
-        add_bool_argument(group, 'wcsph-structures', dest='wcsph_structures',
-                          default=False,
-                          help='Use wcsph solids formulation')
-
     def consume_user_options(self, options):
-        vars = [
-            'alpha_fluid', 'alpha_solid', 'beta_solid',
-            'edac_alpha', 'pst', 'visc_to_solids', 'rogers_eqns',
-            'wcsph_fluids', 'wcsph_structures'
-        ]
+        vars = ['alpha_fluid', 'alpha_solid', 'beta_solid',
+                'edac_alpha', 'pst', 'wall_pst', 'damping', 'damping_coeff']
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
 
@@ -983,8 +918,8 @@ class FSIETVFScheme(Scheme):
                                 SetHIJForInsideParticles,
                                 ElasticSolidMomentumEquation,
                                 ElasticSolidComputeAuHatETVFSun2019,
-                                AddGravityToStructure
-                                )
+                                AddGravityToStructure,
+                                BuiFukagawaDampingGraularSPH)
 
         from solid_mech import (ElasticSolidContinuityEquationUhat,
                                 ElasticSolidContinuityEquationETVFCorrection,
@@ -994,8 +929,6 @@ class FSIETVFScheme(Scheme):
         from pysph.sph.wc.gtvf import (ContinuityEquationGTVF,
                                        MomentumEquationArtificialStress)
 
-        from solid_mech import (ElasticSolidContinuityEquation,
-                                MonaghanArtificialStressCorrection)
         from pysph.sph.solid_mech.basic import (
             IsothermalEOS, MomentumEquationWithStress,
             HookesDeviatoricStressRate, MonaghanArtificialStress)
@@ -1110,27 +1043,15 @@ class FSIETVFScheme(Scheme):
         g1 = []
 
         if len(self.structures) > 0.:
-            if self.wcsph_structures == False:
-                for structure in self.structures:
-                    g1.append(ElasticSolidContinuityEquationUhat(dest=structure,
-                                                                 sources=all))
-                    g1.append(
-                        ElasticSolidContinuityEquationETVFCorrection(
-                            dest=structure, sources=all))
-                    g1.append(VelocityGradient2D(dest=structure, sources=all))
-
-                stage1.append(Group(equations=g1))
-            else:
-                for structure in self.structures:
-                    g1.append(ElasticSolidContinuityEquation(dest=structure,
+            for structure in self.structures:
+                g1.append(ElasticSolidContinuityEquationUhat(dest=structure,
                                                              sources=all))
-                    g1.append(VelocityGradient2D(dest=structure, sources=all))
+                g1.append(
+                    ElasticSolidContinuityEquationETVFCorrection(
+                        dest=structure, sources=all))
+                g1.append(VelocityGradient2D(dest=structure, sources=all))
 
-                    g1.append(
-                        MonaghanArtificialStress(dest=structure, sources=None,
-                                                 eps=self.artificial_stress_eps))
-
-                stage1.append(Group(equations=g1))
+            stage1.append(Group(equations=g1))
 
             g2 = []
             for structure in self.structures:
@@ -1213,26 +1134,26 @@ class FSIETVFScheme(Scheme):
 
         eqs = []
         for fluid in self.fluids:
-            if self.alpha_fluid > 0.:
-                if self.visc_to_solids is True:
-                    eqs.append(
-                        MomentumEquationArtificialViscosity(
-                            dest=fluid,
-                            sources=self.fluids+self.solids+self.structures
-                            + self.structure_solids,
-                            c0=self.c0_fluid,
-                            alpha=self.alpha_fluid
-                        )
-                    )
-                else:
-                    eqs.append(
-                        MomentumEquationArtificialViscosity(
-                            dest=fluid,
-                            sources=self.fluids,
-                            c0=self.c0_fluid,
-                            alpha=self.alpha_fluid
-                        )
-                    )
+            # if self.alpha_fluid > 0.:
+            #     if self.visc_to_solids is True:
+            #         eqs.append(
+            #             MomentumEquationArtificialViscosity(
+            #                 dest=fluid,
+            #                 sources=self.fluids+self.solids+self.structures
+            #                 + self.structure_solids,
+            #                 c0=self.c0_fluid,
+            #                 alpha=self.alpha_fluid
+            #             )
+            #         )
+            #     else:
+            #         eqs.append(
+            #             MomentumEquationArtificialViscosity(
+            #                 dest=fluid,
+            #                 sources=self.fluids,
+            #                 c0=self.c0_fluid,
+            #                 alpha=self.alpha_fluid
+            #             )
+            #         )
 
             # if self.nu_fluid > 0.:
             #     eqs.append(
@@ -1242,16 +1163,10 @@ class FSIETVFScheme(Scheme):
 
             #     )
 
-            if self.rogers_eqns is True:
-                eqs.append(
-                    FluidMomentumEquationPressureGradientRogersConnor(
-                        dest=fluid, sources=self.fluids + self.solids,
-                        gx=self.gx, gy=self.gy, gz=self.gz), )
-            else:
-                eqs.append(
-                    FluidMomentumEquationPressureGradient(
-                        dest=fluid, sources=self.fluids + self.solids,
-                        gx=self.gx, gy=self.gy, gz=self.gz), )
+            eqs.append(
+                FluidMomentumEquationPressureGradient(
+                    dest=fluid, sources=self.fluids + self.solids,
+                    gx=self.gx, gy=self.gy, gz=self.gz), )
 
             eqs.append(
                 MomentumEquationArtificialStress(dest=fluid,
@@ -1262,21 +1177,15 @@ class FSIETVFScheme(Scheme):
 
             eqs.append(
                 FluidComputeAuHatGTVF(dest=fluid,
-                                 sources=self.fluids + self.solids
-                                 + self.structures + self.structure_solids))
+                                      sources=self.fluids + self.solids
+                                      + self.structures + self.structure_solids))
 
             if len(self.structure_solids + self.structures) > 0.:
-                if self.rogers_eqns is True:
-                    eqs.append(
-                        AccelerationOnFluidDueToStructureRogersConnor(
-                            dest=fluid,
-                            sources=self.structures + self.structure_solids), )
-                else:
-                    eqs.append(
-                        AccelerationOnFluidDueToStructure(
-                            dest=fluid,
-                            sources=self.structures + self.structure_solids),
-                    )
+                eqs.append(
+                    AccelerationOnFluidDueToStructure(
+                        dest=fluid,
+                        sources=self.structures + self.structure_solids),
+                )
 
         stage2.append(Group(equations=eqs, real=True))
         # ============================================
@@ -1334,26 +1243,15 @@ class FSIETVFScheme(Scheme):
                         dest=structure,
                         sources=self.structures + self.structure_solids))
 
-                if self.wcsph_structures == False:
-                    g4.append(
-                        ElasticSolidComputeAuHatETVFSun2019(
-                            dest=structure,
-                            sources=[structure] + self.structure_solids,
-                            mach_no=self.mach_no_structure))
-                else:
-                    g4.append(
-                        MonaghanArtificialStressCorrection(
-                            dest=structure,
-                            sources=[structure] + self.structure_solids))
+                g4.append(
+                    ElasticSolidComputeAuHatETVFSun2019(
+                        dest=structure,
+                        sources=[structure] + self.structure_solids,
+                        mach_no=self.mach_no_structure))
 
-                if self.rogers_eqns is True:
-                    g4.append(
-                        AccelerationOnStructureDueToFluidRogersConnor(
-                            dest=structure, sources=self.fluids), )
-                else:
-                    g4.append(
-                        AccelerationOnStructureDueToFluid(dest=structure,
-                                                          sources=self.fluids), )
+                g4.append(
+                    AccelerationOnStructureDueToFluid(dest=structure,
+                                                        sources=self.fluids), )
 
             stage2.append(Group(g4))
 
@@ -1363,6 +1261,12 @@ class FSIETVFScheme(Scheme):
                     AddGravityToStructure(dest=structure, sources=None,
                                           gx=self.gx, gy=self.gy,
                                           gz=self.gz))
+
+                if self.damping == True:
+                    g5.append(
+                        BuiFukagawaDampingGraularSPH(
+                            dest=structure, sources=None,
+                            damping_coeff=self.damping_coeff))
 
                 stage2.append(Group(g5))
 
@@ -1531,9 +1435,6 @@ class FSIETVFScheme(Scheme):
                            's12', 's22', 'as00', 'as01', 'as02', 'as11',
                            'as12', 'as22', 'arho', 'au', 'av', 'aw')
 
-            if self.wcsph_structures == True:
-                add_properties(pa, 'r00', 'r22', 'r02', 'r12', 'r01', 'r11')
-
             # this will change
             kernel = QuinticSpline(dim=self.dim)
             wdeltap = kernel.kernel(rij=pa.h[0], h=pa.h[0])
@@ -1589,9 +1490,6 @@ class FSIETVFScheme(Scheme):
                            's01', 's02', 's11', 's12', 's22', 'cs', 'uhat',
                            'vhat', 'what', 'ub', 'vb', 'wb', 'ubhat', 'vbhat',
                            'wbhat')
-
-            if self.wcsph_structures == True:
-                add_properties(pa, 'r00', 'r22', 'r02', 'r12', 'r01', 'r11')
 
             cs = np.ones_like(pa.x) * get_speed_of_sound(
                 pa.E[0], pa.nu[0], pa.rho_ref[0])
@@ -1748,81 +1646,62 @@ class FSIETVFSubSteppingScheme(FSIETVFScheme):
 
         eqs = []
         for fluid in self.fluids:
-            if self.wcsph_fluids == False:
-                eqs.append(FluidContinuityEquationGTVF(
-                    dest=fluid,
-                    sources=self.fluids))
-                eqs.append(FluidContinuityEquationETVFCorrection(
-                    dest=fluid,
-                    sources=self.fluids))
+            eqs.append(FluidContinuityEquationGTVF(
+                dest=fluid,
+                sources=self.fluids))
+            eqs.append(FluidContinuityEquationETVFCorrection(
+                dest=fluid,
+                sources=self.fluids))
 
-                eqs.append(FluidEDACEquation(
+            eqs.append(FluidEDACEquation(
+                dest=fluid,
+                sources=self.fluids,
+                nu=nu_edac
+            ))
+
+            if len(self.solids) > 0:
+                eqs.append(FluidContinuityEquationGTVFSolid(
                     dest=fluid,
-                    sources=self.fluids,
+                    sources=self.solids))
+                eqs.append(FluidContinuityEquationETVFCorrectionSolid(
+                    dest=fluid,
+                    sources=self.solids))
+
+                eqs.append(FluidEDACEquationSolid(
+                    dest=fluid,
+                    sources=self.solids,
                     nu=nu_edac
                 ))
 
-                if len(self.solids) > 0:
-                    eqs.append(FluidContinuityEquationGTVFSolid(
-                        dest=fluid,
-                        sources=self.solids))
-                    eqs.append(FluidContinuityEquationETVFCorrectionSolid(
-                        dest=fluid,
-                        sources=self.solids))
-
-                    eqs.append(FluidEDACEquationSolid(
-                        dest=fluid,
-                        sources=self.solids,
-                        nu=nu_edac
-                    ))
-
-                if len(self.structures) > 0:
-                    eqs.append(FluidContinuityEquationGTVFFSI(
-                        dest=fluid,
-                        sources=self.structures))
-
-                    eqs.append(FluidContinuityEquationETVFCorrectionFSI(
-                        dest=fluid,
-                        sources=self.structures))
-
-                    eqs.append(FluidEDACEquationFSI(
-                        dest=fluid,
-                        sources=self.structures,
-                        nu=nu_edac
-                    ))
-
-                if len(self.structure_solids) > 0:
-                    eqs.append(FluidContinuityEquationGTVFFSISolid(
-                        dest=fluid,
-                        sources=self.structure_solids))
-
-                    eqs.append(FluidContinuityEquationETVFCorrectionFSISolid(
-                        dest=fluid,
-                        sources=self.structure_solids))
-
-                    eqs.append(FluidEDACEquationFSISolid(
-                        dest=fluid,
-                        sources=self.structure_solids,
-                        nu=nu_edac
-                    ))
-            else:
-                eqs.append(FluidContinuityEquationWCSPH(
+            if len(self.structures) > 0:
+                eqs.append(FluidContinuityEquationGTVFFSI(
                     dest=fluid,
-                    sources=self.fluids))
+                    sources=self.structures))
 
-                if len(self.solids) > 0:
-                    eqs.append(FluidContinuityEquationWCSPHSolid(
-                        dest=fluid,
-                        sources=self.solids))
-                if len(self.structures) > 0:
-                    eqs.append(FluidContinuityEquationWCSPHFSI(
-                        dest=fluid,
-                        sources=self.structures))
+                eqs.append(FluidContinuityEquationETVFCorrectionFSI(
+                    dest=fluid,
+                    sources=self.structures))
 
-                if len(self.structure_solids) > 0:
-                    eqs.append(FluidContinuityEquationWCSPHFSISolid(
-                        dest=fluid,
-                        sources=self.structure_solids))
+                eqs.append(FluidEDACEquationFSI(
+                    dest=fluid,
+                    sources=self.structures,
+                    nu=nu_edac
+                ))
+
+            if len(self.structure_solids) > 0:
+                eqs.append(FluidContinuityEquationGTVFFSISolid(
+                    dest=fluid,
+                    sources=self.structure_solids))
+
+                eqs.append(FluidContinuityEquationETVFCorrectionFSISolid(
+                    dest=fluid,
+                    sources=self.structure_solids))
+
+                eqs.append(FluidEDACEquationFSISolid(
+                    dest=fluid,
+                    sources=self.structure_solids,
+                    nu=nu_edac
+                ))
 
         stage1.append(Group(equations=eqs, real=False))
         # =========================#
@@ -1835,15 +1714,6 @@ class FSIETVFSubSteppingScheme(FSIETVFScheme):
                                    dt=self.dt_fluid_simulated))
 
         stage1.append(Group(equations=eqs, real=False))
-
-        if self.wcsph_fluids == True:
-            eqs = []
-            for fluid in self.fluids:
-                eqs.append(TaitEOS(
-                    dest=fluid, sources=None, rho0=self.rho0_fluid, c0=self.c0_fluid,
-                    gamma=7.))
-
-            stage1.append(Group(equations=eqs, real=False))
 
         if len(self.solids) > 0:
             eqs = []
@@ -1912,71 +1782,57 @@ class FSIETVFSubSteppingScheme(FSIETVFScheme):
 
         eqs = []
         for fluid in self.fluids:
-            if self.alpha_fluid > 0.:
-                if self.visc_to_solids is True:
-                    eqs.append(
-                        MomentumEquationArtificialViscosity(
-                            dest=fluid,
-                            sources=self.fluids+self.solids+self.structures
-                            + self.structure_solids,
-                            c0=self.c0_fluid,
-                            alpha=self.alpha_fluid
-                        )
-                    )
-                else:
-                    eqs.append(
-                        MomentumEquationArtificialViscosity(
-                            dest=fluid,
-                            sources=self.fluids,
-                            c0=self.c0_fluid,
-                            alpha=self.alpha_fluid
-                        )
-                    )
+            # if self.alpha_fluid > 0.:
+            #     if self.visc_to_solids is True:
+            #         eqs.append(
+            #             MomentumEquationArtificialViscosity(
+            #                 dest=fluid,
+            #                 sources=self.fluids+self.solids+self.structures
+            #                 + self.structure_solids,
+            #                 c0=self.c0_fluid,
+            #                 alpha=self.alpha_fluid
+            #             )
+            #         )
+            #     else:
+            #         eqs.append(
+            #             MomentumEquationArtificialViscosity(
+            #                 dest=fluid,
+            #                 sources=self.fluids,
+            #                 c0=self.c0_fluid,
+            #                 alpha=self.alpha_fluid
+            #             )
+            #         )
 
             # if self.nu_fluid > 0.:
             #     eqs.append(
             #         MomentumEquationViscosity(
             #             dest=fluid, sources=self.fluids, nu=self.nu_fluid
             #         )
-
             #     )
 
-            if self.rogers_eqns is True:
-                eqs.append(
-                    FluidMomentumEquationPressureGradientRogersConnor(
-                        dest=fluid, sources=self.fluids + self.solids,
-                        gx=self.gx, gy=self.gy, gz=self.gz), )
-            else:
-                eqs.append(
-                    FluidMomentumEquationPressureGradient(
-                        dest=fluid, sources=self.fluids + self.solids,
-                        gx=self.gx, gy=self.gy, gz=self.gz), )
+            eqs.append(
+                FluidMomentumEquationPressureGradient(
+                    dest=fluid, sources=self.fluids + self.solids,
+                    gx=self.gx, gy=self.gy, gz=self.gz), )
 
-            if self.wcsph_fluids == False:
-                eqs.append(
-                    MomentumEquationArtificialStress(dest=fluid,
-                                                     sources=self.fluids,
-                                                     dim=self.dim))
-                eqs.append(
-                    FluidMomentumEquationTVFDivergence(dest=fluid, sources=self.fluids))
+            eqs.append(
+                MomentumEquationArtificialStress(dest=fluid,
+                                                 sources=self.fluids,
+                                                 dim=self.dim))
+            eqs.append(
+                FluidMomentumEquationTVFDivergence(dest=fluid, sources=self.fluids))
 
-                eqs.append(
-                    FluidComputeAuHatGTVF(dest=fluid,
-                                          sources=self.fluids + self.solids
-                                          + self.structures + self.structure_solids))
+            eqs.append(
+                FluidComputeAuHatGTVF(dest=fluid,
+                                      sources=self.fluids + self.solids
+                                      + self.structures + self.structure_solids))
 
             if len(self.structure_solids + self.structures) > 0.:
-                if self.rogers_eqns is True:
-                    eqs.append(
-                        AccelerationOnFluidDueToStructureRogersConnor(
-                            dest=fluid,
-                            sources=self.structures + self.structure_solids), )
-                else:
-                    eqs.append(
-                        AccelerationOnFluidDueToStructure(
-                            dest=fluid,
-                            sources=self.structures + self.structure_solids),
-                    )
+                eqs.append(
+                    AccelerationOnFluidDueToStructure(
+                        dest=fluid,
+                        sources=self.structures + self.structure_solids),
+                )
 
                 # if self.pressure_integration_fsi is True:
                 #     eqs.append(
@@ -2015,27 +1871,15 @@ class FSIETVFSubSteppingScheme(FSIETVFScheme):
 
         g1 = []
         if len(self.structures) > 0.:
-            if self.wcsph_structures == False:
-                for structure in self.structures:
-                    g1.append(ElasticSolidContinuityEquationUhat(dest=structure,
-                                                                 sources=all))
-                    g1.append(
-                        ElasticSolidContinuityEquationETVFCorrection(
-                            dest=structure, sources=all))
-                    g1.append(VelocityGradient2D(dest=structure, sources=all))
+            for structure in self.structures:
+                g1.append(ElasticSolidContinuityEquationUhat(dest=structure,
+                                                                sources=all))
+                g1.append(
+                    ElasticSolidContinuityEquationETVFCorrection(
+                        dest=structure, sources=all))
+                g1.append(VelocityGradient2D(dest=structure, sources=all))
 
-                stage1_stucture_eqs.append(Group(equations=g1))
-            else:
-                for structure in self.structures:
-                    g1.append(ElasticSolidContinuityEquation(dest=structure,
-                                                             sources=all))
-                    g1.append(VelocityGradient2D(dest=structure, sources=all))
-
-                    g1.append(
-                        MonaghanArtificialStress(dest=structure, sources=None,
-                                                 eps=self.artificial_stress_eps))
-
-                stage1_stucture_eqs.append(Group(equations=g1))
+            stage1_stucture_eqs.append(Group(equations=g1))
 
             g2 = []
             for structure in self.structures:
@@ -2106,26 +1950,23 @@ class FSIETVFSubSteppingScheme(FSIETVFScheme):
                         dest=structure,
                         sources=self.structures + self.structure_solids))
 
-                if self.wcsph_structures == False:
-                    g4.append(
-                        ElasticSolidComputeAuHatETVFSun2019(
-                            dest=structure,
-                            sources=[structure] + self.structure_solids,
-                            mach_no=self.mach_no_structure))
-                else:
-                    g4.append(
-                        MonaghanArtificialStressCorrection(
-                            dest=structure,
-                            sources=[structure] + self.structure_solids))
+                if self.pst == "sun2019":
+                    if self.wall_pst is True:
+                        g4.append(
+                            ElasticSolidComputeAuHatETVFSun2019(
+                                dest=structure,
+                                sources=[structure] + self.structure_solids,
+                                mach_no=self.mach_no_structure))
+                    else:
+                        g4.append(
+                            ElasticSolidComputeAuHatETVFSun2019(
+                                dest=structure,
+                                sources=[structure],
+                                mach_no=self.mach_no_structure))
 
-                if self.rogers_eqns is True:
-                    g4.append(
-                        AccelerationOnStructureDueToFluidRogersConnor(
-                            dest=structure, sources=self.fluids), )
-                else:
-                    g4.append(
-                        AccelerationOnStructureDueToFluid(dest=structure,
-                                                          sources=self.fluids), )
+                g4.append(
+                    AccelerationOnStructureDueToFluid(dest=structure,
+                                                      sources=self.fluids), )
 
             stage1_stucture_eqs.append(Group(g4))
 

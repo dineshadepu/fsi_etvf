@@ -122,14 +122,7 @@ scheme deals with tensile instability in both fluid and solid inherently.
 \section{Governing equations}
 
 
-\subsection{Discrete governing equations}
-
-In this current paper the fluid medium is modelled using the improvised scheme
-of TVF, which is been applied to the free surface flows, called ETVF.
-
-For detailed derivation we point the reader to paper \cite{cite our paper},
-here we only give the discrete equations.
-
+\subsection{Solid mechanics equations}
 
 The discretized equations of the fluid medium are
 
@@ -141,37 +134,39 @@ The discretized equations of the fluid medium are
   \ten{u}))_{ab}) \; \cdot \nabla_{a} W_{ab},
 \end{equation}
 
-\begin{multline}
-  \label{eq:sph-discretization-edac}
-  \frac{\tilde{d}p_a}{dt} = \sum_{b} \; \frac{m_b}{\rho_{b}} \; \bigg(
-  (p_{a} - \rho_{a} c_{s}^2) \; \ten{u}_{ab} \; - \;
-  p_{a} \; \tilde{\ten{u}}_{ab} \; - \;
-  (p \; (\tilde{\ten{u}} - \ten{u}))_{ab} \; + \; \\
-  4 \; \nu_{edac}
-  \frac{p_a - p_b}{(\rho_a + \rho_b) (r^2_{ab} + EPS)} \ten{r}_{ab}
-  \bigg) \; \cdot \nabla_{a} W_{ab}
-\end{multline}
-
-
-\begin{multline}
-  \label{eq:sph-momentum-fluid}
-  \frac{\tilde{d}\ten{u}_{a}}{dt} = - \sum_{b} m_b \bigg[
-  \bigg(\frac{p_a}{\rho_a^2} + \frac{p_b}{\rho_b^2}\bigg) \ten{I} -
-  \bigg(\frac{\ten{A}_a}{\rho_a^2} + \frac{\ten{A}_b}{\rho_b^2}\bigg) \bigg]
-  \nabla_{a} W_{ab} \\
-  + \ten{u}_{a} \sum_{b} \frac{m_b}{\rho_{b}} \; \tilde{\ten{u}}_{ab} \cdot \nabla_{a} W_{ab} +
-  \ten{g}_{a}.
-\end{multline}
-
-
 \begin{equation}
   \label{eq:sph-momentum-solid}
   \frac{\tilde{d}\ten{u}_{a}}{dt} = - \sum_{b} m_b \bigg[
   \bigg(\frac{p_a}{\rho_a^2} + \frac{p_b}{\rho_b^2}\bigg) \ten{I} -
   \bigg(\frac{\teng{\sigma}^{'}_{a}}{\rho_a^2} +
-  \frac{\teng{\sigma}^{'}_{b}}{\rho_b^2}\bigg) \bigg]  \nabla_{a} W_{ab} +
-  \ten{g}_{a}.
+  \frac{\teng{\sigma}^{'}_{b}}{\rho_b^2} + \Pi_{ab} \ten{I} \bigg) \bigg]  \cdot \nabla_{a} W_{ab} +
+  \ten{g}_{a},
 \end{equation}
+
+$\Pi_{ab}$ is the artificial
+viscosity~\cite{monaghan-review:2005} to maintain the stability of the
+numerical scheme. It is given as,
+\begin{align}
+  \label{eq:mom-av}
+  \Pi_{ab} =
+  \begin{cases}
+\frac{-\alpha h_{ab} \bar{c}_{ab} \phi_{ab}}{\bar{\rho}_{ab}}
+  & \ten{u}_{ab}\cdot \ten{r}_{ab} < 0, \\
+  0 & \ten{u}_{ab}\cdot \ten{r}_{ab} \ge 0,
+\end{cases}
+\end{align}
+where,
+%
+\begin{equation}
+  \label{eq:av-phiij}
+  \phi_{ab} = \frac{\ten{u}_{ab} \cdot \ten{r}_{ab}}{r^2_{ab} + 0.01 h^2_{ab}},
+\end{equation}
+%
+where $\ten{r}_{ab} = \ten{r}_a - \ten{r}_b$, $\ten{u}_{ab} = \ten{u}_a -
+\ten{u}_b$, $h_{ab} = (h_a + h_b)/2$, $\bar{\rho}_{ab} = (\rho_a + \rho_b)/2$,
+$\bar{c}_{ab} = (c_a + c_b) / 2$, and $\alpha$ is the artificial
+viscosity parameter.
+
 
 The Jaumann's formulation for Hooke's stress provides us with the rate of
 change of deviatoric stress,
@@ -201,8 +196,6 @@ and $\Omega_{ij}$ is the rotational tensor,
 \end{equation}
 
 
-In both fluid and solid modelling, the pressure is computed using an
-isothermal equation of state, given as,
 \begin{equation}
   \label{eq:pressure-equation}
   p = K \bigg(\frac{\rho}{\rho_{0}} - 1 \bigg),
@@ -290,6 +283,27 @@ Currently this is a sub problem of elastic dam break. In that problem we are
 simulating gate with out considering the gravity. By considering the gravity
 we get float division error. It will be interesting to see why such thing is
 happening only in the case with gravity and solving such is fun.
+
+
+\begin{table}[!ht]
+  \centering
+  \begin{tabular}[!ht]{ll}
+    % \toprule
+    Quantity & Values \\
+    % \midrule
+    $D$, Diameter & 2m \\
+    $\rho_0$, reference density & 1000kg/m\textsuperscript{3} \\
+    $c_s$ & 10m/s \\
+    $D/\Delta x_{\max}$, lowest resolution & 4 \\
+    $D/\Delta x_{\min} $, highest resolution & 160, 250, 500\\
+    $C_r$ & 1.08 \\
+    Reynolds number & 40, 550, 1000, 3000, and 9500 \\
+    Time of simulation & 6 \\
+    % \bottomrule
+  \end{tabular}
+  \caption{Parameters used for the flow past a circular cylinder problem.}%
+  \label{tab:fpc-params}
+\end{table}
 
 
 \subsection{Dynamics response of an elastic plate}

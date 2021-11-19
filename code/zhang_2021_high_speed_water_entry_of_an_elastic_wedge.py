@@ -49,9 +49,9 @@ def find_displacement_index(pa):
     min_y = min(y)
     min_y_indices = np.where(y == min_y)[0]
     index = min_y_indices[int(len(min_y_indices)/2)]
-    pa.add_property('tip_displacemet_index', type='int',
+    pa.add_property('A_index', type='int',
                     data=np.zeros(len(pa.x)))
-    pa.tip_displacemet_index[index] = 1
+    pa.A_index[index] = 1
 
 
 def get_hydrostatic_tank_with_fluid(fluid_length=1., fluid_height=2., tank_height=2.3,
@@ -99,9 +99,27 @@ def get_wedge(wedge_size, wedge_width, slope, spacing):
     _x = np.arange(-wedge_size, wedge_size, dx)
     _y = np.arange(-dx, (no_of_layers)*dx, dx)
     xw, yw = np.meshgrid(_x, _y)
+    xw = xw.ravel()
+    yw = yw.ravel()
+    yw += - min(yw)
+
+    # find the index on right panel in middle (fig 21)
+    max_x = max(xw)
+
+    B_index = (yw == min(yw)) & (
+        (xw > max_x / 2. - spacing / 2.) & (xw < max_x / 2. + spacing / 2.))
+
+    # find the indices of the right panel (fig 22)
+    right_panel = (yw == min(yw)) & (xw > 0.)
+
+    # find the indices of B, C (Fig 19 b)
+    C_index = (yw == min(yw)) & (
+        (xw > max_x - wedge_size/4. - spacing / 2.) &
+        (xw < max_x - wedge_size/4. + spacing / 2.))
+
     yw = yw + xw * np.tan(np.sign(xw)*slope*np.pi/180)
 
-    return xw, yw
+    return xw, yw, B_index, right_panel, C_index
 
 
 class WaterEntryOfElasticWedge(Application):
@@ -256,10 +274,10 @@ class WaterEntryOfElasticWedge(Application):
         # =============================================
         # Only structures part particle properties
         # =============================================
-        xp, yp = get_wedge(self.wedge_size,
-                           self.wedge_width,
-                           10.,
-                           self.fluid_spacing)
+        xp, yp, B_index, right_panel_indices, C_index = get_wedge(self.wedge_size,
+                                                                  self.wedge_width,
+                                                                  10.,
+                                                                  self.fluid_spacing)
         # make sure that the wedge intersection with wall starts at the 0.
         min_xp = np.min(xp)
 
@@ -274,13 +292,11 @@ class WaterEntryOfElasticWedge(Application):
         xp += self.fluid_length
         wedge = get_particle_array(
             x=xp, y=yp, v=-30, m=m, h=self.h_fluid, rho=self.wedge_rho0,
+            E=self.wedge_E, nu=self.wedge_nu, rho_ref=self.wedge_rho0,
             name="wedge",
             constants={
-                'E': self.wedge_E,
                 'n': 4.,
-                'nu': self.wedge_nu,
                 'spacing0': self.wedge_spacing,
-                'rho_ref': self.wedge_rho0
             })
         # add post processing variables.
         find_displacement_index(wedge)
@@ -296,7 +312,20 @@ class WaterEntryOfElasticWedge(Application):
         wedge.m_fsi[:] = self.fluid_density * self.fluid_spacing**2.
         wedge.rho_fsi[:] = self.fluid_density
 
-        wedge.add_output_arrays(['tip_displacemet_index'])
+        # setup properties for post processing
+        # wedge_post_process_properties(wedge)
+        wedge.add_property('right_panel_indices')
+        wedge.add_property('A_index')
+        wedge.add_property('B_index')
+        wedge.add_property('C_index')
+        wedge.right_panel_indices[:] = right_panel_indices
+        wedge.B_index[:] = B_index
+        wedge.C_index[:] = C_index
+
+        wedge.add_output_arrays(['right_panel_indices',
+                                 'A_index',
+                                 'B_index',
+                                 'C_index'])
         wedge.add_output_arrays(['is_boundary'])
         return [fluid, tank, wedge]
 

@@ -218,7 +218,6 @@ class ElasticGate(Application):
         self.gate_nu = 0.4
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
-        self.pb_gate = self.gate_rho0 * self.c0_gate**2
         self.u_max_gate = 50
         self.mach_no_gate = self.u_max_gate / self.c0_gate
         self.boundary_equations_2 = get_boundary_identification_etvf_equations(
@@ -306,12 +305,10 @@ class ElasticGate(Application):
         xp += self.fluid_length
         gate = get_particle_array(
             x=xp, y=yp, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate",
+            E=self.gate_E, nu=self.gate_nu, rho_ref=self.gate_rho0,
             constants={
-                'E': self.gate_E,
                 'n': 4.,
-                'nu': self.gate_nu,
                 'spacing0': self.gate_spacing,
-                'rho_ref': self.gate_rho0,
                 'rho_ref_fluid': self.fluid_density,
             })
 
@@ -322,12 +319,10 @@ class ElasticGate(Application):
         # xw += max(xf) + max(xf) / 2.
         gate_support = get_particle_array(
             x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate_support",
+            E=self.gate_E, nu=self.gate_nu, rho_ref=self.gate_rho0,
             constants={
-                'E': self.gate_E,
                 'n': 4.,
-                'nu': self.gate_nu,
                 'spacing0': self.gate_spacing,
-                'rho_ref': self.gate_rho0
             })
         # ================================
         # Adjust the geometry
