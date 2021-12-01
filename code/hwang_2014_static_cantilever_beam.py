@@ -1,5 +1,6 @@
 import numpy as np
 from math import cos, sin, sinh, cosh
+import os
 
 # SPH equations
 from pysph.base.kernels import (QuinticSpline)
@@ -428,6 +429,9 @@ class StaticCantileverBeamUnderTipLoad(Application):
             _t = sd['t']
             t.append(_t)
             amplitude.append(plate.y[index])
+
+        res = os.path.join(self.output_dir, "results.npz")
+        np.savez(res, t_ctvf=t, y_ctvf=amplitude)
 
         import os
         from matplotlib import pyplot as plt

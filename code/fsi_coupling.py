@@ -1592,12 +1592,6 @@ class FSIETVFSubSteppingScheme(FSIETVFScheme):
         from pysph.sph.wc.gtvf import (ContinuityEquationGTVF,
                                        MomentumEquationArtificialStress)
 
-        from solid_mech import (ElasticSolidContinuityEquation,
-                                MonaghanArtificialStressCorrection)
-        from pysph.sph.solid_mech.basic import (
-            IsothermalEOS, MomentumEquationWithStress,
-            HookesDeviatoricStressRate, MonaghanArtificialStress)
-
         nu_edac = self._get_edac_nu()
         all = self.fluids + self.solids
         stage1 = []

@@ -233,10 +233,10 @@ class FluidContinuityEquationETVFCorrectionSolid(Equation):
         d_arho[d_idx] += s_m[s_idx] / s_rho[s_idx] * vijdotdwij
 
 
-class FluidEDACEquation(Equation):
+class FluidEDACEquationWCSPH(Equation):
     def __init__(self, dest, sources, nu):
         self.nu = nu
-        super(FluidEDACEquation, self).__init__(dest, sources)
+        super(FluidEDACEquationWCSPH, self).__init__(dest, sources)
 
     def initialize(self, d_ap, d_idx):
         d_ap[d_idx] = 0.0
@@ -302,10 +302,10 @@ class FluidEDACEquation(Equation):
         d_ap[d_idx] += self.nu * tmp * (d_p[d_idx] - s_p[s_idx])
 
 
-class FluidEDACEquationSolid(Equation):
+class FluidEDACEquationSolidWCSPH(Equation):
     def __init__(self, dest, sources, nu):
         self.nu = nu
-        super(FluidEDACEquationSolid, self).__init__(dest, sources)
+        super(FluidEDACEquationSolidWCSPH, self).__init__(dest, sources)
 
     def initialize(self, d_ap, d_idx):
         d_ap[d_idx] = 0.0
@@ -604,6 +604,35 @@ class EDACGTVFStep(IntegratorStep):
         # d_uhat[d_idx] = d_u[d_idx] + dtb2 * d_auhat[d_idx]
         # d_vhat[d_idx] = d_v[d_idx] + dtb2 * d_avhat[d_idx]
         # d_what[d_idx] = d_w[d_idx] + dtb2 * d_awhat[d_idx]
+
+
+class FluidsWCSPHStep(IntegratorStep):
+    def stage1(self, d_idx, d_u, d_v, d_w, d_au, d_av, d_aw, d_uhat, d_vhat,
+               d_what, d_auhat, d_avhat, d_awhat, dt):
+        dtb2 = 0.5 * dt
+        d_u[d_idx] += dtb2 * d_au[d_idx]
+        d_v[d_idx] += dtb2 * d_av[d_idx]
+        d_w[d_idx] += dtb2 * d_aw[d_idx]
+
+        # d_uhat[d_idx] = d_u[d_idx] + dtb2 * d_auhat[d_idx]
+        # d_vhat[d_idx] = d_v[d_idx] + dtb2 * d_avhat[d_idx]
+        # d_what[d_idx] = d_w[d_idx] + dtb2 * d_awhat[d_idx]
+
+    def stage2(self, d_idx, d_u, d_v, d_w, d_x, d_y, d_z, d_rho,
+               d_arho, d_m, d_p, d_ap, dt):
+        d_rho[d_idx] += dt * d_arho[d_idx]
+        d_p[d_idx] += dt * d_ap[d_idx]
+
+        d_x[d_idx] += dt * d_u[d_idx]
+        d_y[d_idx] += dt * d_v[d_idx]
+        d_z[d_idx] += dt * d_w[d_idx]
+
+    def stage3(self, d_idx, d_u, d_v, d_w, d_au, d_av, d_aw, dt, d_uhat,
+               d_vhat, d_what, d_auhat, d_avhat, d_awhat):
+        dtb2 = 0.5 * dt
+        d_u[d_idx] += dtb2 * d_au[d_idx]
+        d_v[d_idx] += dtb2 * d_av[d_idx]
+        d_w[d_idx] += dtb2 * d_aw[d_idx]
 
 
 class PECStep(IntegratorStep):
@@ -1120,8 +1149,9 @@ class ETVFScheme(Scheme):
         if len(self.solids) > 0:
             for solid in self.solids:
                 eqs.append(
-                    SetWallVelocityFreeSlipAndNoSlip(dest=solid,
-                                                     sources=self.fluids))
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(
+                        dest=solid, sources=self.fluids))
+
                 eqs.append(
                     SolidWallPressureBC(dest=solid, sources=self.fluids,
                                         gx=self.gx, gy=self.gy, gz=self.gz), )
@@ -1505,6 +1535,198 @@ class ETVFScheme(Scheme):
 
                 if 'n' not in pa.constants:
                     pa.add_constant('n', 0.)
+
+            add_boundary_identification_properties(pa)
+
+            pa.h_b[:] = pa.h
+
+        for solid in self.solids:
+            pa = pas[solid]
+
+            add_properties(pa, 'rho', 'V', 'wij2', 'wij', 'uhat', 'vhat',
+                           'what')
+
+            # Adami boundary conditions. SetWallVelocity
+            add_properties(pa, 'ug', 'vf', 'vg', 'wg', 'uf', 'wf')
+            add_properties(pa, 'ugfs', 'vgfs', 'wgfs')
+
+            add_properties(pa, 'ughatns', 'vghatns', 'wghatns')
+            add_properties(pa, 'ughatfs', 'vghatfs', 'wghatfs')
+
+            # No slip boundary conditions for viscosity force
+            add_properties(pa, 'ugns', 'vgns', 'wgns')
+
+            # pa.h_b[:] = pa.h[:]
+
+            # for normals
+            pa.add_property('normal', stride=3)
+            pa.add_output_arrays(['normal'])
+            pa.add_property('normal_tmp', stride=3)
+
+            name = pa.name
+
+            props = ['m', 'rho', 'h']
+            for p in props:
+                x = pa.get(p)
+                if numpy.all(x < 1e-12):
+                    msg = f'WARNING: cannot compute normals "{p}" is zero'
+                    print(msg)
+
+            seval = SPHEvaluator(
+                arrays=[pa], equations=[
+                    Group(
+                        equations=[ComputeNormals(dest=name, sources=[name])]),
+                    Group(
+                        equations=[SmoothNormals(dest=name, sources=[name])]),
+                ], dim=self.dim)
+            seval.evaluate()
+
+    def get_solver(self):
+        return self.solver
+
+    def _get_edac_nu(self):
+        if self.art_nu > 0:
+            nu = self.art_nu
+            print(self.art_nu)
+            print("Using artificial viscosity for EDAC with nu = %s" % nu)
+        else:
+            nu = self.nu
+            print("Using real viscosity for EDAC with nu = %s" % self.nu)
+        return nu
+
+
+class FluidsWCSPHScheme(ETVFScheme):
+    def configure_solver(self, kernel=None, integrator_cls=None,
+                         extra_steppers=None, **kw):
+        from pysph.base.kernels import QuinticSpline
+        from pysph.sph.wc.gtvf import GTVFIntegrator
+        kernel = self.kernel(dim=self.dim)
+        steppers = {}
+        if extra_steppers is not None:
+            steppers.update(extra_steppers)
+
+        step_cls = FluidsWCSPHStep
+        cls = (integrator_cls
+               if integrator_cls is not None else GTVFIntegrator)
+
+        for fluid in self.fluids:
+            if fluid not in steppers:
+                steppers[fluid] = step_cls()
+        integrator = cls(**steppers)
+
+        from pysph.solver.solver import Solver
+        self.solver = Solver(dim=self.dim, integrator=integrator,
+                             kernel=kernel, **kw)
+
+    def get_equations(self):
+        from pysph.sph.wc.gtvf import (ContinuityEquationGTVF,
+                                       MomentumEquationArtificialStress,
+                                       MomentumEquationViscosity)
+        from pysph.sph.iisph import (SummationDensity)
+        nu_edac = self._get_edac_nu()
+        all = self.fluids + self.solids
+        stage1 = []
+
+        eqs = []
+        if len(self.solids) > 0:
+            for solid in self.solids:
+                eqs.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(
+                        dest=solid, sources=self.fluids))
+
+            stage1.append(Group(equations=eqs, real=False))
+
+        eqs = []
+        for fluid in self.fluids:
+            eqs.append(ContinuityEquationGTVF(dest=fluid,
+                                              sources=self.fluids), )
+
+            if self.edac is True:
+                eqs.append(
+                    EDACEquationWCSPH(dest=fluid, sources=self.fluids,
+                                      nu=nu_edac), )
+
+        if len(self.solids) > 0:
+            for fluid in self.fluids:
+                eqs.append(
+                    FluidsContinuitySolidEquationWCSPH(dest=fluid,
+                                                       sources=self.solids), )
+
+            if self.edac is True:
+                eqs.append(
+                    FluidsEDACSolidEquationWCSPH(dest=fluid, sources=self.solids,
+                                                 nu=nu_edac), )
+
+        stage1.append(Group(equations=eqs, real=False))
+
+        # =========================#
+        # stage 2 equations start
+        # =========================#
+
+        stage2 = []
+
+        if self.edac is False:
+            tmp = []
+            for fluid in self.fluids:
+                tmp.append(
+                    StateEquation(dest=fluid, sources=None, p0=self.pb,
+                                  rho0=self.rho0))
+
+            stage2.append(Group(equations=tmp, real=False))
+
+        if len(self.solids) > 0:
+            eqs = []
+            for solid in self.solids:
+                eqs.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(dest=solid,
+                                                           sources=self.fluids))
+
+                eqs.append(
+                    SolidWallPressureBC(dest=solid, sources=self.fluids,
+                                        gx=self.gx, gy=self.gy, gz=self.gz))
+            stage2.append(Group(equations=eqs, real=False))
+
+        eqs = []
+        for fluid in self.fluids:
+            eqs.append(
+                FluidMomentumEquationPressureGradient(dest=fluid, sources=all,
+                                                      gx=self.gx, gy=self.gy,
+                                                      gz=self.gz), )
+
+            if self.nu > 0:
+                eqs.append(
+                    MomentumEquationViscosity(dest=fluid, sources=self.fluids,
+                                              nu=self.nu))
+
+                if len(self.solids) > 0:
+                    eqs.append(
+                        MomentumEquationViscosityNoSlip(
+                            dest=fluid, sources=self.solids, nu=self.nu))
+
+        stage2.append(Group(equations=eqs, real=True))
+
+        return MultiStageEquations([stage1, stage2])
+
+    def setup_properties(self, particles, clean=True):
+        pas = dict([(p.name, p) for p in particles])
+        for fluid in self.fluids:
+            pa = pas[fluid]
+            props = 'u0 v0 w0 x0 y0 z0 rho0 arho ap arho p0 uhat vhat what auhat avhat awhat h_b V'.split(
+            )
+            for prop in props:
+                pa.add_property(prop)
+
+            pa.h_b[:] = pa.h[:]
+
+            if 'c0_ref' not in pa.constants:
+                pa.add_constant('c0_ref', self.c0)
+            pa.add_output_arrays(['p'])
+
+            if 'wdeltap' not in pa.constants:
+                pa.add_constant('wdeltap', -1.)
+
+            if 'n' not in pa.constants:
+                pa.add_constant('n', 0.)
 
             add_boundary_identification_properties(pa)
 

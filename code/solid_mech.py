@@ -732,11 +732,12 @@ class ElasticSolidSetWallVelocityNoSlipUhat(Equation):
             d_wbhat[d_idx] -= vn*d_normal[idx3+2]
 
 
-class MonaghanArtificialViscosity(Equation):
+class ElasticSolidMonaghanArtificialViscosity(Equation):
     def __init__(self, dest, sources, alpha=1.0, beta=1.0):
         self.alpha = alpha
         self.beta = beta
-        super(MonaghanArtificialViscosity, self).__init__(dest, sources)
+        super(ElasticSolidMonaghanArtificialViscosity, self).__init__(
+            dest, sources)
 
     def initialize(self, d_idx, d_au, d_av, d_aw):
         d_au[d_idx] = 0.0
@@ -994,7 +995,7 @@ class SolidsScheme(Scheme):
             # add only if there is some positive value
             if self.artificial_vis_alpha > 0. or self.artificial_vis_beta > 0.:
                 g4.append(
-                    MonaghanArtificialViscosity(
+                    ElasticSolidMonaghanArtificialViscosity(
                         dest=solid, sources=[solid]+self.boundaries,
                         alpha=self.artificial_vis_alpha,
                         beta=self.artificial_vis_beta))

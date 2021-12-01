@@ -114,31 +114,27 @@ class Hwang2014StaticCantileverBeam(Problem):
         self.make_output_dir()
         self.plot_disp(fname='homogenous')
 
-    def plot_disp(self, condition, fname):
+    def plot_disp(self, fname):
         max_t = 0.
         # print("condition is", condition)
         t_analytical = np.array([])
 
-        for case in filter_cases(self.cases, **condition):
+        for case in self.cases:
             data = np.load(case.input_path('results.npz'))
 
             t = data['t_ctvf']
             max_t = max(max_t, max(t))
-            amplitude_ctvf = data['amplitude_ctvf']
+            y_ctvf = data['y_ctvf']
 
             label = opts2path(case.params, keys=['N'])
 
-            plt.plot(t, amplitude_ctvf, label=label.replace('_', ' = '))
+            plt.plot(t, y_ctvf, label=label.replace('_', ' = '))
 
             t_analytical = np.linspace(0., max_t, 1000)
             amplitude_analytical = data['amplitude_analytical'][0] * np.ones_like(t_analytical)
 
-            t_analytical = np.linspace(0., max_t, 1000)
-            amplitude_khayyer = data['amplitude_khayyer'][0] * np.ones_like(t_analytical)
-
         if len(t_analytical) > 0:
             plt.plot(t_analytical, amplitude_analytical, label='Analytical')
-            plt.plot(t_analytical, amplitude_khayyer, label='khayyer')
 
         plt.xlabel('time')
         plt.ylabel('Y - amplitude')
@@ -175,7 +171,7 @@ class Sun2019OscillatingPlateTurek(Problem):
                            no_clamp=None,
                            wall_pst=None,
                            pfreq=1000,
-                           tf=5.,
+                           tf=5,
                            **kw))
 
     def run(self):
@@ -183,15 +179,10 @@ class Sun2019OscillatingPlateTurek(Problem):
         self.plot_disp(fname='homogenous')
 
     def plot_disp(self, fname):
-        max_t = 0.
-        # print("condition is", condition)
-        t_analytical = np.array([])
-
         for case in self.cases:
             data = np.load(case.input_path('results.npz'))
 
             t = data['t_ctvf']
-            max_t = max(max_t, max(t))
             amplitude_ctvf = data['amplitude_ctvf']
 
             label = opts2path(case.params, keys=['N'])
@@ -201,8 +192,11 @@ class Sun2019OscillatingPlateTurek(Problem):
             t_fem = data['t_fem']
             amplitude_fem = data['amplitude_fem']
 
-        if len(t_analytical) > 0:
-            plt.plot(t_fem, amplitude_fem, label='FEM')
+        # sort the fem data before plotting
+        p = t_fem.argsort()
+        t_fem_new = t_fem[p]
+        amplitude_fem_new = amplitude_fem[p]
+        plt.plot(t_fem_new, amplitude_fem_new, label='FEM')
 
         plt.xlabel('time')
         plt.ylabel('Y - amplitude')
@@ -210,6 +204,116 @@ class Sun2019OscillatingPlateTurek(Problem):
         plt.savefig(self.output_path(fname))
         plt.clf()
         plt.close()
+
+
+class DamBreak2D(Problem):
+    def get_name(self):
+        return 'dam_break_2d'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/dam_break_2d.py' + backend + ' --detailed '
+
+        # Base case info
+        self.case_info = {
+            'wcsph': (dict(
+                pst='sun2019',
+                no_edac=None,
+                no_cont_vc_bc=None,
+                dx=0.05,
+                tf=0.5,
+                pfreq=200,
+                alpha=0.05
+            ), 'WCSPH'),
+
+            'wcsph_1': (dict(
+                pst='sun2019',
+                edac=None,
+                no_cont_vc_bc=None,
+                dx=0.05,
+                tf=0.5,
+                pfreq=200,
+                alpha=0.05
+            ), 'WCSPH'),
+
+            'wcsph_2': (dict(
+                pst='sun2019',
+                edac=None,
+                no_clamp_p=None,
+                cont_vc_bc=None,
+                dx=0.05,
+                tf=0.5,
+                pfreq=200,
+                alpha=0.05
+            ), 'WCSPH'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
+
+
+class HydrostaticTank(Problem):
+    def get_name(self):
+        return 'hydrostatic_tank'
+
+    def setup(self):
+        get_path = self.input_path
+
+        cmd = 'python code/hydrostatic_tank.py' + backend + ' --detailed '
+
+        # Base case info
+        self.case_info = {
+            'wcsph': (dict(
+                pst='sun2019',
+                no_edac=None,
+                no_cont_vc_bc=None,
+                dx=0.05,
+                tf=1.,
+                pfreq=200,
+                alpha=0.05
+            ), 'WCSPH'),
+
+            'wcsph_1': (dict(
+                pst='sun2019',
+                edac=None,
+                no_cont_vc_bc=None,
+                dx=0.05,
+                tf=1.,
+                pfreq=200,
+                alpha=0.05
+            ), 'WCSPH'),
+
+            'wcsph_2': (dict(
+                pst='sun2019',
+                edac=None,
+                no_clamp_p=None,
+                cont_vc_bc=None,
+                dx=0.05,
+                tf=1.,
+                pfreq=200,
+                alpha=0.05
+            ), 'WCSPH'),
+        }
+
+        self.cases = [
+            Simulation(get_path(name), cmd,
+                       job_info=dict(n_core=n_core,
+                                     n_thread=n_thread), cache_nnps=None,
+                       **scheme_opts(self.case_info[name][0]))
+            for name in self.case_info
+        ]
+
+    def run(self):
+        self.make_output_dir()
 
 
 class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
@@ -405,7 +509,7 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
         self.case_info = {
             'ctvf': (dict(
                 scheme='ctvf',
-                pfreq=200,
+                pfreq=300,
                 tf=0.7,
                 ), 'CTVF'),
         }
@@ -538,9 +642,13 @@ if __name__ == '__main__':
     matplotlib.use('pdf')
 
     PROBLEMS = [
-        # Static cases
+        # stuctures cases
         Hwang2014StaticCantileverBeam,
         Sun2019OscillatingPlateTurek,
+
+        # fluids cases
+        DamBreak2D,
+        HydrostaticTank,
 
         Ng2020HydrostaticWaterColumnOnElasticPlate,
         Ng2020ElasticDamBreak,

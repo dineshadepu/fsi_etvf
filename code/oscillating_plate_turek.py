@@ -1,3 +1,19 @@
+"""[1] Study of a complex fluid-structure dam-breaking benchmark problem using a
+multi-phase SPH method with APR
+
+https://doi.org/10.1016/j.enganabound.2019.03.033
+
+Appendix A: Dynamic response of an oscillating plate
+
+
+[2] A fluid-structure interaction model for free-surface flows and flexible
+structures using smoothed particle hydrodynamics on a GPU
+
+https://doi.org/10.1016/j.jfluidstructs.2021.103312
+
+4.1: Oscillating beam under gravity
+"""
+
 import numpy as np
 from math import cos, sin, sinh, cosh
 
@@ -162,7 +178,8 @@ class OscillatingPlate(Application):
         self.mach_no = self.u_max / self.c0
         self.L = 0.35
         self.H = 0.02
-        self.dx_plate = self.H / self.N
+        self.dx_plate = 0.01 / self.N
+        print("dx plate is", self.dx_plate)
         self.h = self.hdx * self.dx_plate
         # boundary equations
         if self.options.wall_pst is True:
@@ -324,10 +341,10 @@ class OscillatingPlate(Application):
                           delimiter=',')
         t_fem, amplitude_fem = data[:, 0], data[:, 1]
 
-        res = os.path.join(os.path.dirname(fname), "results.npz")
+        res = os.path.join(self.output_dir, "results.npz")
         # res = os.path.join(fname, "results.npz")
         np.savez(res, amplitude_ctvf=amplitude_ctvf, t_ctvf=t_ctvf,
-                 t_fem=t_fem, y_amplitude_fem=amplitude_fem)
+                 t_fem=t_fem, amplitude_fem=amplitude_fem)
 
         from matplotlib import pyplot as plt
 
@@ -347,4 +364,3 @@ if __name__ == '__main__':
     app = OscillatingPlate()
     app.run()
     app.post_process(app.info_filename)
-    # app.create_rings_geometry()
