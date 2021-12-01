@@ -326,15 +326,18 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
     def setup(self):
         get_path = self.input_path
 
-        cmd = 'python code/ng_2020_hydrostatic_water_column_on_elastic_plate.py' + backend
+        cmd = 'python code/ng_2020_hydrostatic_water_column_on_elastic_plate.py' + backend + ' --max-s 1 '
 
         # Base case info
         self.case_info = {
-            'ctvf': (dict(
-                scheme='substep',
+            'd0_1e_minus_2': (dict(
+                scheme='wcsph',
+                solid_velocity_bc=None,
+                no_wall_pst=None,
+                damping=None,
+                damping_coeff=0.002,
                 pfreq=500,
-                tf=1.,
-                no_rogers_eqns=None,
+                tf=0.1,
                 d0=1e-2,
                 ), 'CTVF'),
 

@@ -7,6 +7,7 @@ python lid_driven_cavity.py --openmp --scheme etvf --integrator pec --internal-f
 import numpy
 import numpy as np
 
+from pysph.sph.integrator import Integrator
 from pysph.sph.equation import Equation, Group, MultiStageEquations
 from pysph.sph.integrator_step import IntegratorStep
 from pysph.sph.scheme import Scheme
@@ -597,11 +598,11 @@ class FSIWCSPHScheme(Scheme):
         self.beta_solid = beta_solid
         self.alpha_fluid = alpha_fluid
         self.edac_alpha = edac_alpha
-        self.pst = pst
         self.edac = edac
         self.wall_pst = True
         self.damping = False
         self.damping_coeff = 0.002
+        self.solid_velocity_bc = True
 
         # common properties
         self.solver = None
@@ -629,6 +630,10 @@ class FSIWCSPHScheme(Scheme):
                            dest="edac_alpha", default=None,
                            help="Alpha for the EDAC scheme viscosity.")
 
+        add_bool_argument(group, 'solid-velocity-bc', dest='solid_velocity_bc',
+                          default=True,
+                          help='Apply velocity bc to solids in Elastic dynamics')
+
         add_bool_argument(group, 'wall-pst', dest='wall_pst',
                           default=True, help='Add wall as PST source')
 
@@ -641,15 +646,9 @@ class FSIWCSPHScheme(Scheme):
                            dest="damping_coeff", default=0.000, type=float,
                            help="Damping coefficient for Bui")
 
-        choices = ['sun2019', 'gtvf']
-        group.add_argument(
-            "--pst", action="store", dest='pst', default="sun2019",
-            choices=choices,
-            help="Specify what PST to use (one of %s)." % choices)
-
     def consume_user_options(self, options):
         vars = ['alpha_fluid', 'alpha_solid', 'beta_solid',
-                'edac_alpha', 'pst', 'wall_pst', 'damping', 'damping_coeff']
+                'edac_alpha', 'wall_pst', 'damping', 'damping_coeff']
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
 
@@ -861,7 +860,7 @@ class FSIWCSPHScheme(Scheme):
                     VelocityGradient2D(
                         dest=structure, sources=self.structures))
 
-                if len(self.boundaries) > 0:
+                if len(self.structure_solids) > 0:
                     g1.append(
                         ElasticSolidContinuityEquationUhatSolid(dest=structure,
                                                                 sources=self.structure_solids))
@@ -899,9 +898,7 @@ class FSIWCSPHScheme(Scheme):
                     FluidSolidWallPressureBCFluidSolid(dest=solid, sources=self.fluids,
                                                        gx=self.gx, gy=self.gy, gz=self.gz))
                 eqs.append(
-                    FluidClampWallPressureFluidSolid(dest=solid, sources=None,
-                                                     p_0=self.pb_fluid,
-                                                     rho_0=self.rho0_fluid))
+                    FluidClampWallPressureFluidSolid(dest=solid, sources=None,))
 
             stage2.append(Group(equations=eqs, real=False))
 
@@ -921,8 +918,7 @@ class FSIWCSPHScheme(Scheme):
                         gx=self.gx, gy=self.gy, gz=self.gz))
                 eqs.append(
                     FluidClampWallPressureStructureSolid(
-                        dest=structure, sources=None, p_0=self.pb_fluid,
-                        rho_0=self.rho0_fluid))
+                        dest=structure, sources=None))
 
             stage2.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure
@@ -943,9 +939,7 @@ class FSIWCSPHScheme(Scheme):
                                                       gx=self.gx, gy=self.gy,
                                                       gz=self.gz))
                 eqs.append(
-                    FluidClampWallPressureStructure(dest=structure, sources=None,
-                                                    p_0=self.pb_fluid,
-                                                    rho_0=self.rho0_fluid))
+                    FluidClampWallPressureStructure(dest=structure, sources=None))
 
             stage2.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure
@@ -1095,6 +1089,8 @@ class FSIWCSPHScheme(Scheme):
         return MultiStageEquations([stage1, stage2])
 
     def setup_properties(self, particles, clean=True):
+        from solid_mech import (get_shear_modulus, get_speed_of_sound)
+
         pas = dict([(p.name, p) for p in particles])
         for fluid in self.fluids:
             pa = pas[fluid]
@@ -1257,22 +1253,24 @@ class FSIWCSPHScheme(Scheme):
                            's12', 's22', 'as00', 'as01', 'as02', 'as11',
                            'as12', 'as22', 'arho', 'au', 'av', 'aw')
 
+            # for isothermal eqn
+            pa.rho_ref[:] = pa.rho[:]
+
             # this will change
             kernel = QuinticSpline(dim=self.dim)
-            wdeltap = kernel.kernel(rij=pa.h[0], h=pa.h[0])
+            wdeltap = kernel.kernel(rij=pa.spacing0[0], h=pa.h[0])
             pa.add_constant('wdeltap', wdeltap)
 
             # set the shear modulus G
-            G = get_shear_modulus(pa.E[0], pa.nu[0])
-            pa.add_constant('G', G)
+            pa.add_property('G')
 
             # set the speed of sound
-            cs = np.ones_like(pa.x) * get_speed_of_sound(
-                pa.E[0], pa.nu[0], pa.rho_ref[0])
-            pa.cs[:] = cs[:]
+            for i in range(len(pa.x)):
+                cs = get_speed_of_sound(pa.E[i], pa.nu[i], pa.rho_ref[i])
+                G = get_shear_modulus(pa.E[i], pa.nu[i])
 
-            c0_ref = get_speed_of_sound(pa.E[0], pa.nu[0], pa.rho_ref[0])
-            pa.add_constant('c0_ref', c0_ref)
+                pa.G[i] = G
+                pa.cs[i] = cs
 
             # auhat properties are needed for gtvf, etvf but not for gray. But
             # for the compatability with the integrator we will add
@@ -1320,14 +1318,6 @@ class FSIWCSPHScheme(Scheme):
             pa.add_property('ughat')
             pa.add_property('vghat')
             pa.add_property('wghat')
-
-        # Properties for new equations, setting mass and other fractions
-        for name in self.fluids+self.structures+self.solids+self.structure_solids:
-            pa = pas[name]
-            add_properties(pa, 'p_frac', 'rho_frac', 'm_frac')
-            pa.p_frac[:] = 1.
-            pa.rho_frac[:] = 1.
-            pa.m_frac[:] = 1.
 
     def get_solver(self):
         return self.solver
@@ -1535,9 +1525,7 @@ class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
                     FluidSolidWallPressureBCFluidSolid(dest=solid, sources=self.fluids,
                                                        gx=self.gx, gy=self.gy, gz=self.gz))
                 eqs.append(
-                    FluidClampWallPressureFluidSolid(dest=solid, sources=None,
-                                                     p_0=self.pb_fluid,
-                                                     rho_0=self.rho0_fluid))
+                    FluidClampWallPressureFluidSolid(dest=solid, sources=None))
 
             stage1.append(Group(equations=eqs, real=False))
 
@@ -1552,13 +1540,10 @@ class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
                 eqs.append(
                     FluidSolidWallPressureBCStructureSolid(
                         dest=structure, sources=self.fluids,
-                        p_0=self.pb_fluid,
-                        rho_0=self.rho0_fluid,
                         gx=self.gx, gy=self.gy, gz=self.gz))
                 eqs.append(
                     FluidClampWallPressureStructureSolid(
-                        dest=structure, sources=None, p_0=self.pb_fluid,
-                        rho_0=self.rho0_fluid))
+                        dest=structure, sources=None))
 
             stage1.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure
@@ -1574,14 +1559,10 @@ class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
                 eqs.append(
                     FluidSolidWallPressureBCStructure(dest=structure,
                                                       sources=self.fluids,
-                                                      p_0=self.pb_fluid,
-                                                      rho_0=self.rho0_fluid,
                                                       gx=self.gx, gy=self.gy,
                                                       gz=self.gz))
                 eqs.append(
-                    FluidClampWallPressureStructure(dest=structure, sources=None,
-                                                    p_0=self.pb_fluid,
-                                                    rho_0=self.rho0_fluid))
+                    FluidClampWallPressureStructure(dest=structure, sources=None))
 
             stage1.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure
@@ -1673,7 +1654,7 @@ class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
 
             tmp = []
             if len(self.structure_solids) > 0:
-                for boundary in self.structure_solid:
+                for boundary in self.structure_solids:
                     tmp.append(
                         ElasticSolidSetWallVelocityNoSlipUhat(
                             dest=boundary, sources=self.structures))
@@ -1691,7 +1672,7 @@ class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
                     VelocityGradient2D(
                         dest=structure, sources=self.structures))
 
-                if len(self.boundaries) > 0:
+                if len(self.structure_solids) > 0:
                     g1.append(
                         ElasticSolidContinuityEquationUhatSolid(dest=structure,
                                                                 sources=self.structure_solids))
@@ -1791,9 +1772,11 @@ class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
                     AccelerationOnStructureDueToFluid(dest=structure,
                                                       sources=self.fluids), )
 
-                g4.append(
-                    AccelerationOnStructureDueToFluidViscosity(
-                        dest=structure, sources=self.fluids, nu=self.nu_fluid))
+                if self.nu_fluid > 0.:
+                    g4.append(
+                        AccelerationOnStructureDueToFluidViscosity(
+                            dest=structure, sources=self.fluids,
+                            nu=self.nu_fluid))
 
             stage1_stucture_eqs.append(Group(g4))
 

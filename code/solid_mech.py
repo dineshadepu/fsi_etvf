@@ -33,6 +33,7 @@ from pysph.examples.solid_mech.impact import add_properties
 from boundary_particles import (ComputeNormals, SmoothNormals,
                                 IdentifyBoundaryParticleCosAngleEDAC)
 
+from pysph.sph.basic_equations import (VelocityGradient2D)
 from pysph.sph.integrator import Integrator
 
 import numpy as np
@@ -888,7 +889,6 @@ class SolidsScheme(Scheme):
 
     def _get_gtvf_equation(self):
         from pysph.sph.equation import Group
-        from pysph.sph.basic_equations import (VelocityGradient2D)
 
         stage1 = []
         g1 = []
@@ -1076,7 +1076,7 @@ class SolidsScheme(Scheme):
             pa.rho_ref[:] = pa.rho[:]
 
             # this will change
-            kernel = self.kernel(dim=2)
+            kernel = self.kernel(dim=self.dim)
             wdeltap = kernel.kernel(rij=pa.spacing0[0], h=pa.h[0])
             pa.add_constant('wdeltap', wdeltap)
 

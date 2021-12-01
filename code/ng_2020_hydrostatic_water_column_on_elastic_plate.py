@@ -21,6 +21,7 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.tools.geometry import get_2d_block, rotate
 
 from fsi_coupling import FSIETVFSubSteppingScheme
+from fsi_wcsph import FSIWCSPHSubSteppingScheme
 
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
@@ -265,13 +266,14 @@ class ElasticGate(Application):
         # ===================================
         xp += self.fluid_length
         gate = get_particle_array(
-            x=xp, y=yp, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate",
+            x=xp, y=yp, m=m, h=self.h_fluid, rho=self.gate_rho0,
+            E=self.gate_E,
+            nu=self.gate_nu,
+            rho_ref=self.gate_rho0,
+            name="gate",
             constants={
-                'E': self.gate_E,
                 'n': 4.,
-                'nu': self.gate_nu,
                 'spacing0': self.gate_spacing,
-                'rho_ref': self.gate_rho0
             })
         # add post processing variables.
         find_displacement_index(gate)
@@ -282,13 +284,14 @@ class ElasticGate(Application):
         xw += self.fluid_length
         # xw += max(xf) + max(xf) / 2.
         gate_support = get_particle_array(
-            x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0, name="gate_support",
+            x=xw, y=yw, m=m, h=self.h_fluid, rho=self.gate_rho0,
+            E=self.gate_E,
+            nu=self.gate_nu,
+            rho_ref=self.gate_rho0,
+            name="gate_support",
             constants={
-                'E': self.gate_E,
                 'n': 4.,
-                'nu': self.gate_nu,
                 'spacing0': self.gate_spacing,
-                'rho_ref': self.gate_rho0
             })
 
         self.scheme.setup_properties([fluid, tank,
@@ -312,23 +315,39 @@ class ElasticGate(Application):
         return [fluid, tank, gate, gate_support]
 
     def create_scheme(self):
-        substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
-                                           solids=['tank'],
-                                           structures=['gate'],
-                                           structure_solids=['gate_support'],
-                                           dt_fluid=1.,
-                                           dt_solid=1.,
-                                           dim=2,
-                                           h_fluid=0.,
-                                           rho0_fluid=0.,
-                                           pb_fluid=0.,
-                                           c0_fluid=0.,
-                                           nu_fluid=0.,
-                                           mach_no_fluid=0.,
-                                           mach_no_structure=0.,
-                                           gy=0.)
+        etvf_substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
+                                                solids=['tank'],
+                                                structures=['gate'],
+                                                structure_solids=['gate_support'],
+                                                dt_fluid=1.,
+                                                dt_solid=1.,
+                                                dim=2,
+                                                h_fluid=0.,
+                                                rho0_fluid=0.,
+                                                pb_fluid=0.,
+                                                c0_fluid=0.,
+                                                nu_fluid=0.,
+                                                mach_no_fluid=0.,
+                                                mach_no_structure=0.,
+                                                gy=0.)
 
-        s = SchemeChooser(default='substep', substep=substep)
+        wcsph_substep = FSIWCSPHSubSteppingScheme(fluids=['fluid'],
+                                                  solids=['tank'],
+                                                  structures=['gate'],
+                                                  structure_solids=['gate_support'],
+                                                  dt_fluid=1.,
+                                                  dt_solid=1.,
+                                                  dim=2,
+                                                  h_fluid=0.,
+                                                  rho0_fluid=0.,
+                                                  pb_fluid=0.,
+                                                  c0_fluid=0.,
+                                                  nu_fluid=0.,
+                                                  mach_no_fluid=0.,
+                                                  mach_no_structure=0.,
+                                                  gy=0.)
+
+        s = SchemeChooser(default='wcsph', etvf=etvf_substep, wcsph=wcsph_substep)
 
         return s
 
