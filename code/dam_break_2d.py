@@ -22,12 +22,13 @@ from pysph.sph.scheme import SchemeChooser
 
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
+from geometry import hydrostatic_tank_2d, create_tank_2d_from_block_2d
 
 
-fluid_column_height = 2.0
-fluid_column_width = 1.0
-container_height = 4.0
-container_width = 4
+fluid_column_height = 0.292
+fluid_column_width = 0.146
+container_height = 0.3
+container_width = 0.7
 nboundary_layers = 4
 
 g = 9.81
@@ -49,12 +50,17 @@ class Dambreak2D(DB.DamBreak2D):
         # print(self.boundary_equations)
 
     def create_particles(self):
-        xt, yt = get_2d_tank(dx=self.dx, length=container_width,
-                             height=container_height, num_layers=nboundary_layers)
+        # ===================================
+        # Create fluid
+        # ===================================
         xf, yf = get_2d_block(dx=self.dx, length=fluid_column_width,
-                              height=fluid_column_height, center=[-1.5, 1])
-        xt += 2.0
-        xf += 2.0
+                              height=fluid_column_height)
+
+        xt, yt = create_tank_2d_from_block_2d(
+            xf, yf, container_width, container_height, self.dx,
+            nboundary_layers)
+        # xt += 2.0
+        # xf += 2.0
         xf += self.dx
         yf += self.dx
         h = self.hdx * self.dx

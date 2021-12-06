@@ -117,9 +117,9 @@ class FluidContinuityEquationWCSPHOnFluidSolid(Equation):
 
     def loop(self, d_idx, s_idx, s_m, d_rho, s_rho, d_u, d_v, d_w,
              s_ugfs, s_vgfs, s_wgfs, d_arho, DWIJ):
-        uhatij = d_u[d_idx] - s_ugfs[s_idx]
-        vhatij = d_v[d_idx] - s_vgfs[s_idx]
-        whatij = d_w[d_idx] - s_wgfs[s_idx]
+        uhatij = d_u[d_idx] - s_ugfs[s_idx] * 0.
+        vhatij = d_v[d_idx] - s_vgfs[s_idx] * 0.
+        whatij = d_w[d_idx] - s_wgfs[s_idx] * 0.
 
         udotdij = DWIJ[0] * uhatij + DWIJ[1] * vhatij + DWIJ[2] * whatij
         fac = d_rho[d_idx] * s_m[s_idx] / s_rho[s_idx]

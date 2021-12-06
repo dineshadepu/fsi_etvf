@@ -213,7 +213,7 @@ class DamBreak2D(Problem):
     def setup(self):
         get_path = self.input_path
 
-        cmd = 'python code/dam_break_2d.py' + backend + ' --detailed '
+        cmd = 'python code/dam_break_2d.py' + backend
 
         # Base case info
         self.case_info = {
@@ -221,8 +221,8 @@ class DamBreak2D(Problem):
                 pst='sun2019',
                 no_edac=None,
                 no_cont_vc_bc=None,
-                dx=0.05,
-                tf=0.5,
+                dx=1e-3,
+                tf=1.,
                 pfreq=200,
                 alpha=0.05
             ), 'WCSPH'),
@@ -232,7 +232,7 @@ class DamBreak2D(Problem):
                 edac=None,
                 no_cont_vc_bc=None,
                 dx=0.05,
-                tf=0.5,
+                tf=1.,
                 pfreq=200,
                 alpha=0.05
             ), 'WCSPH'),
@@ -243,7 +243,7 @@ class DamBreak2D(Problem):
                 no_clamp_p=None,
                 cont_vc_bc=None,
                 dx=0.05,
-                tf=0.5,
+                tf=1.,
                 pfreq=200,
                 alpha=0.05
             ), 'WCSPH'),
@@ -276,7 +276,7 @@ class HydrostaticTank(Problem):
                 pst='sun2019',
                 no_edac=None,
                 no_cont_vc_bc=None,
-                dx=0.05,
+                dx=1e-3,
                 tf=1.,
                 pfreq=200,
                 alpha=0.05
@@ -326,21 +326,45 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
     def setup(self):
         get_path = self.input_path
 
-        cmd = 'python code/ng_2020_hydrostatic_water_column_on_elastic_plate.py' + backend + ' --max-s 1 '
+        cmd = 'python code/ng_2020_hydrostatic_water_column_on_elastic_plate.py' + backend
 
         # Base case info
         self.case_info = {
-            'd0_1e_minus_2': (dict(
+            'N_10': (dict(
                 scheme='wcsph',
                 solid_velocity_bc=None,
+                alpha_fluid=2.0,
                 no_wall_pst=None,
                 damping=None,
                 damping_coeff=0.002,
                 pfreq=500,
-                tf=0.1,
-                d0=1e-2,
-                ), 'CTVF'),
+                tf=3.,
+                d0=0.55 * 1e-2,
+                ), 'N=10'),
 
+            'N_15': (dict(
+                scheme='wcsph',
+                solid_velocity_bc=None,
+                alpha_fluid=2.0,
+                no_wall_pst=None,
+                damping=None,
+                damping_coeff=0.002,
+                pfreq=700,
+                tf=3.,
+                d0=1e-2 * 0.35,
+                ), 'N=15'),
+
+            'N_20': (dict(
+                scheme='wcsph',
+                solid_velocity_bc=None,
+                alpha_fluid=2.0,
+                no_wall_pst=None,
+                damping=None,
+                damping_coeff=0.002,
+                pfreq=1500,
+                tf=3.,
+                d0=1e-2 * 0.25,
+                ), 'N=20'),
             # 'rogers': (dict(
             #     scheme='ctvf',
             #     pfreq=500,
@@ -366,8 +390,9 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
         for name in self.case_info:
             data[name] = np.load(self.input_path(name, 'results.npz'))
 
-        t_analytical = data['ctvf']['t_analytical']
-        y_analytical = data['ctvf']['y_analytical']
+        rand_case = (list(data.keys())[0])
+        t_analytical = data[rand_case]['t_analytical']
+        y_analytical = data[rand_case]['y_analytical']
 
         # ==================================
         # Plot x amplitude
@@ -405,11 +430,17 @@ class Ng2020ElasticDamBreak(Problem):
 
         # Base case info
         self.case_info = {
-            'ctvf': (dict(
-                scheme='ctvf',
+            # 'ctvf': (dict(
+            #     scheme='ctvf',
+            #     pfreq=500,
+            #     tf=0.4,
+            #     ), 'CTVF')
+
+            'wcsph': (dict(
+                scheme='wcsph',
                 pfreq=500,
                 tf=0.4,
-                ), 'CTVF')
+                ), 'wcsph')
         }
 
         self.cases = [
@@ -429,25 +460,27 @@ class Ng2020ElasticDamBreak(Problem):
         for name in self.case_info:
             data[name] = np.load(self.input_path(name, 'results.npz'))
 
-        txant = data['ctvf']['txant']
-        xdant = data['ctvf']['xdant']
-        txkha = data['ctvf']['txkha']
-        xdkha = data['ctvf']['xdkha']
-        txyan = data['ctvf']['txyan']
-        xdyan = data['ctvf']['xdyan']
-        txng = data['ctvf']['txng']
-        xdng = data['ctvf']['xdng']
-        txwcsph = data['ctvf']['txwcsph']
-        xdwcsph = data['ctvf']['xdwcsph']
+        rand_case = (list(data.keys())[0])
 
-        tyant = data['ctvf']['tyant']
-        ydant = data['ctvf']['ydant']
-        tykha = data['ctvf']['tykha']
-        ydkha = data['ctvf']['ydkha']
-        tyyan = data['ctvf']['tyyan']
-        ydyan = data['ctvf']['ydyan']
-        tyng = data['ctvf']['tyng']
-        ydng = data['ctvf']['ydng']
+        txant = data[rand_case]['txant']
+        xdant = data[rand_case]['xdant']
+        txkha = data[rand_case]['txkha']
+        xdkha = data[rand_case]['xdkha']
+        txyan = data[rand_case]['txyan']
+        xdyan = data[rand_case]['xdyan']
+        txng = data[rand_case]['txng']
+        xdng = data[rand_case]['xdng']
+        txwcsph = data[rand_case]['txwcsph']
+        xdwcsph = data[rand_case]['xdwcsph']
+
+        tyant = data[rand_case]['tyant']
+        ydant = data[rand_case]['ydant']
+        tykha = data[rand_case]['tykha']
+        ydkha = data[rand_case]['ydkha']
+        tyyan = data[rand_case]['tyyan']
+        ydyan = data[rand_case]['ydyan']
+        tyng = data[rand_case]['tyng']
+        ydng = data[rand_case]['ydng']
 
         # ==================================
         # Plot x amplitude
@@ -510,11 +543,11 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
 
         # Base case info
         self.case_info = {
-            'ctvf': (dict(
-                scheme='ctvf',
+            'wcsph': (dict(
+                scheme='wcsph',
                 pfreq=300,
                 tf=0.7,
-                ), 'CTVF'),
+                ), 'WCSPH'),
         }
 
         self.cases = [
@@ -527,6 +560,49 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
 
     def run(self):
         self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        rand_case = (list(data.keys())[0])
+
+        txsun = data[rand_case]['txsun']
+        xdsun = data[rand_case]['xdsun']
+        txbogaers = data[rand_case]['txbogaers']
+        xdbogaers = data[rand_case]['xdbogaers']
+        txidelsohn = data[rand_case]['txidelsohn']
+        xdidelsohn = data[rand_case]['xdidelsohn']
+        txliu = data[rand_case]['txliu']
+        xdliu = data[rand_case]['xdliu']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        plt.plot(txsun, xdsun, "o", label='Sun et al 2019, MPS-DEM')
+        plt.plot(txbogaers, xdbogaers, "^", label='Bogaers 2016, QN-LS')
+        plt.plot(txidelsohn, xdidelsohn, "+", label='Idelsohn 20108, PFEM')
+        plt.plot(txliu, xdliu, "v", label='Liu 2013, SPH')
+
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            x_ctvf = data[name]['x_ctvf']
+
+            plt.plot(t_ctvf, x_ctvf, label=self.case_info[name][1])
+
+        plt.xlabel('time')
+        plt.ylabel('x - amplitude')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('x_amplitude.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot x amplitude
+        # ==================================
 
 
 class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):

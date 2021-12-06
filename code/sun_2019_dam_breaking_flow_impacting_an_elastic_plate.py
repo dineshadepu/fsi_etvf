@@ -46,6 +46,9 @@ from pysph.examples.solid_mech.impact import add_properties
 #                                                                create_sphere)
 from pysph.tools.geometry import get_2d_block, rotate
 
+# from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
+from fsi_wcsph import FSIWCSPHScheme
+
 from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
@@ -354,31 +357,44 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         return [fluid, tank, gate, gate_support]
 
     def create_scheme(self):
-        ctvf = FSIETVFScheme(fluids=['fluid'],
-                             solids=['tank'],
-                             structures=['gate'],
-                             structure_solids=['gate_support'],
-                             dim=2,
-                             h_fluid=0.,
-                             c0_fluid=0.,
-                             nu_fluid=0.,
-                             rho0_fluid=0.,
-                             mach_no_fluid=0.,
-                             mach_no_structure=0.)
+        # ctvf = FSIETVFScheme(fluids=['fluid'],
+        #                      solids=['tank'],
+        #                      structures=['gate'],
+        #                      structure_solids=['gate_support'],
+        #                      dim=2,
+        #                      h_fluid=0.,
+        #                      c0_fluid=0.,
+        #                      nu_fluid=0.,
+        #                      rho0_fluid=0.,
+        #                      mach_no_fluid=0.,
+        #                      mach_no_structure=0.)
 
-        substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
-                                           solids=['tank'],
-                                           structures=['gate'],
-                                           structure_solids=['gate_support'],
-                                           dim=2,
-                                           h_fluid=0.,
-                                           c0_fluid=0.,
-                                           nu_fluid=0.,
-                                           rho0_fluid=0.,
-                                           mach_no_fluid=0.,
-                                           mach_no_structure=0.)
+        # substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
+        #                                    solids=['tank'],
+        #                                    structures=['gate'],
+        #                                    structure_solids=['gate_support'],
+        #                                    dim=2,
+        #                                    h_fluid=0.,
+        #                                    c0_fluid=0.,
+        #                                    nu_fluid=0.,
+        #                                    rho0_fluid=0.,
+        #                                    mach_no_fluid=0.,
+        #                                    mach_no_structure=0.)
 
-        s = SchemeChooser(default='substep', ctvf=ctvf, substep=substep)
+        wcsph = FSIWCSPHScheme(fluids=['fluid'],
+                               solids=['tank'],
+                               structures=['gate'],
+                               structure_solids=['gate_support'],
+                               dim=2,
+                               h_fluid=0.,
+                               c0_fluid=0.,
+                               nu_fluid=0.,
+                               rho0_fluid=0.,
+                               mach_no_fluid=0.,
+                               mach_no_structure=0.)
+
+        # s = SchemeChooser(default='wcsph', substep=substep, wcsph=wcsph)
+        s = SchemeChooser(default='wcsph', wcsph=wcsph)
 
         return s
 
@@ -453,69 +469,61 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         arrays = data['arrays']
         pa = arrays['gate']
         index = np.where(pa.tip_displacemet_index == 1)[0][0]
-        y_0 = pa.y[index]
         x_0 = pa.x[index]
 
-        t_ctvf, y_ctvf, x_ctvf = [], [], []
-        for sd, gate in iter_output(files[::5], 'gate'):
+        t_ctvf, x_ctvf = [], []
+        for sd, gate in iter_output(files[::1], 'gate'):
             _t = sd['t']
             t_ctvf.append(_t)
-            y_ctvf.append(gate.y[index] - y_0)
             x_ctvf.append(gate.x[index] - x_0)
 
-        # # gtvf data
-        # path = os.path.abspath(__file__)
-        # directory = os.path.dirname(path)
+        # Numerical data
+        path = os.path.abspath(__file__)
+        directory = os.path.dirname(path)
 
-        # # load the data
-        # data_x_disp_antoci_exp = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_antoci_2007_experiment.csv'),
-        #                                     delimiter=',')
-        # data_x_disp_khayyer_2018 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_khayyer_2018_isph_sph.csv'),
-        #                                       delimiter=',')
-        # data_x_disp_yang_2012 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_yang_2012_sph_fem.csv'),
-        #                                    delimiter=',')
-        # data_x_disp_ng_2020 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_ng_2020_sph_vcpm_alpha_1.csv'),
-        #                                  delimiter=',')
-        # data_x_disp_wcsph_pysph = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_x_displacement_wcsph_pysph.csv'),
-        #                                      delimiter=',')
+        # load the data
+        data_x_disp_sun_2019 = np.loadtxt(
+            os.path.join(directory, 'sun_2019_dam_breaking_flow_impacting_an_elastic_plate_x_displacement_sun_2019_mps_dem.csv'),
+            delimiter=',')
 
-        # data_y_disp_antoci_exp = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_antoci_2007_experiment.csv'),
-        #                                     delimiter=',')
-        # data_y_disp_khayyer_2018 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_khayyer_2018_isph_sph.csv'),
-        #                                       delimiter=',')
-        # data_y_disp_yang_2012 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_yang_2012_sph_fem.csv'),
-        #                                    delimiter=',')
-        # data_y_disp_ng_2020 = np.loadtxt(os.path.join(directory, 'ng_2020_elastic_dam_break_y_displacement_ng_2020_sph_vcpm_alpha_1.csv'),
-        #                                  delimiter=',')
+        data_x_disp_bogaers_2016 = np.loadtxt(
+            os.path.join(directory, 'sun_2019_dam_breaking_flow_impacting_an_elastic_plate_x_displacement_bogaers_2016_qn_ls.csv'),
+            delimiter=',')
 
-        # txant, xdant = data_x_disp_antoci_exp[:, 0], data_x_disp_antoci_exp[:, 1]
-        # txkha, xdkha = data_x_disp_khayyer_2018[:, 0], data_x_disp_khayyer_2018[:, 1]
-        # txyan, xdyan = data_x_disp_yang_2012[:, 0], data_x_disp_yang_2012[:, 1]
-        # txng, xdng = data_x_disp_ng_2020[:, 0], data_x_disp_ng_2020[:, 1]
-        # txwcsph, xdwcsph = data_x_disp_wcsph_pysph[:, 0], data_x_disp_wcsph_pysph[:, 1]
-        # txwcsph += 0.05
+        data_x_disp_idelsohn_2008 = np.loadtxt(
+            os.path.join(directory, 'sun_2019_dam_breaking_flow_impacting_an_elastic_plate_x_displacement_idelsohn_2008_pfrem.csv'),
+            delimiter=',')
 
-        # tyant, ydant = data_y_disp_antoci_exp[:, 0], data_y_disp_antoci_exp[:, 1]
-        # tykha, ydkha = data_y_disp_khayyer_2018[:, 0], data_y_disp_khayyer_2018[:, 1]
-        # tyyan, ydyan = data_y_disp_yang_2012[:, 0], data_y_disp_yang_2012[:, 1]
-        # tyng, ydng = data_y_disp_ng_2020[:, 0], data_y_disp_ng_2020[:, 1]
+        data_x_disp_liu_2013 = np.loadtxt(
+            os.path.join(directory, 'sun_2019_dam_breaking_flow_impacting_an_elastic_plate_x_displacement_liu_2013_sph.csv'),
+            delimiter=',')
 
-        # res = os.path.join(self.output_dir, "results.npz")
-        # np.savez(res, txant=txant, xdant=xdant, txkha=txkha, xdkha=xdkha,
-        #          txyan=txyan, xdyan=xdyan, txng=txng, xdng=xdng, tyant=tyant,
-        #          ydant=ydant, tykha=tykha, ydkha=ydkha, tyyan=tyyan,
-        #          ydyan=ydyan, tyng=tyng, ydng=ydng, txwcsph=txwcsph,
-        #          xdwcsph=xdwcsph, t_ctvf=t_ctvf, x_ctvf=x_ctvf, y_ctvf=y_ctvf)
+        txsun, xdsun = data_x_disp_sun_2019[:, 0], data_x_disp_sun_2019[:, 1]
+        txbogaers, xdbogaers = data_x_disp_bogaers_2016[:, 0], data_x_disp_bogaers_2016[:, 1]
+        txidelsohn, xdidelsohn = data_x_disp_idelsohn_2008[:, 0], data_x_disp_idelsohn_2008[:, 1]
+        txliu, xdliu = data_x_disp_liu_2013[:, 0], data_x_disp_liu_2013[:, 1]
+
+        res = os.path.join(self.output_dir, "results.npz")
+        np.savez(res,
+                 txsun=txsun,
+                 xdsun=xdsun,
+                 txbogaers=txbogaers,
+                 xdbogaers=xdbogaers,
+                 txidelsohn=txidelsohn,
+                 xdidelsohn=xdidelsohn,
+                 txliu=txliu,
+                 xdliu=xdliu,
+                 t_ctvf=t_ctvf, x_ctvf=x_ctvf)
 
         # ========================
         # x amplitude figure
         # ========================
         plt.clf()
-        # plt.plot(txant, xdant, "o", label='Antoci 2008, Experiment')
-        # plt.plot(txkha, xdkha, "^", label='Khayyer 2018, ISPH-SPH')
-        # plt.plot(txyan, xdyan, "+", label='Yang 2012, SPH-FEM')
-        # plt.plot(txng, xdng, "v", label='Ng 2020, SPH-VCPM')
-        # plt.plot(txwcsph, xdwcsph, "*", label='WCSPH PySPH')
+        plt.plot(txsun, xdsun, "o", label='Sun et al 2019, MPS-DEM')
+        plt.plot(txbogaers, xdbogaers, "^", label='Bogaers 2016, QN-LS')
+        plt.plot(txidelsohn, xdidelsohn, "+", label='Idelsohn 20108, PFEM')
+        plt.plot(txliu, xdliu, "v", label='Liu 2013, SPH')
+
         plt.plot(t_ctvf, x_ctvf, "-", label='CTVF')
 
         plt.title('x amplitude')
@@ -526,26 +534,6 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         plt.savefig(fig, dpi=300)
         # ========================
         # x amplitude figure
-        # ========================
-
-        # ========================
-        # y amplitude figure
-        # ========================
-        plt.clf()
-        # plt.plot(tyant, ydant, "o", label='Antoci 2008, Experiment')
-        # plt.plot(tykha, ydkha, "v", label='Khayyer 2018, ISPH-SPH')
-        # plt.plot(tyyan, ydyan, "o", label='Yang 2012, SPH-FEM')
-        # plt.plot(tyng, ydng, "o", label='Ng 2020, SPH-VCPM')
-        plt.plot(t_ctvf, y_ctvf, "-", label='CTVF')
-
-        plt.title('y amplitude')
-        plt.xlabel('t')
-        plt.ylabel('y amplitude')
-        plt.legend()
-        fig = os.path.join(os.path.dirname(fname), "y_amplitude_with_t.png")
-        plt.savefig(fig, dpi=300)
-        # ========================
-        # y amplitude figure
         # ========================
 
 

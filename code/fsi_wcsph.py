@@ -705,6 +705,7 @@ class FSIWCSPHScheme(Scheme):
             FluidEDACEquationWCSPHOnFluid,
             FluidEDACEquationWCSPHOnFluidSolid,
 
+            StateEquation,
             FluidSolidWallPressureBCFluidSolid,
             FluidClampWallPressureFluidSolid,
             FluidMomentumEquationPressureGradient,
@@ -746,26 +747,6 @@ class FSIWCSPHScheme(Scheme):
         # =========================#
         # fluid equations
         # =========================#
-        if len(self.solids) > 0:
-            eqs_u = []
-
-            for solid in self.solids:
-                eqs_u.append(
-                    FluidSetWallVelocityUFreeSlipAndNoSlip(
-                        dest=solid, sources=self.fluids))
-
-            stage1.append(Group(equations=eqs_u, real=False))
-
-        if len(self.structure_solids) > 0:
-            eqs_u = []
-
-            for solid in self.structure_solids:
-                eqs_u.append(
-                    FluidSetWallVelocityUFreeSlipAndNoSlip(
-                        dest=solid, sources=self.fluids))
-
-            stage1.append(Group(equations=eqs_u, real=False))
-
         # ============================
         # Continuity and EDAC equation
         # ============================
@@ -775,44 +756,20 @@ class FSIWCSPHScheme(Scheme):
                 dest=fluid,
                 sources=self.fluids))
 
-            eqs.append(FluidEDACEquationWCSPHOnFluid(
-                dest=fluid,
-                sources=self.fluids,
-                nu=nu_edac
-            ))
-
             if len(self.solids) > 0:
                 eqs.append(FluidContinuityEquationWCSPHOnFluidSolid(
                     dest=fluid,
                     sources=self.solids))
-
-                eqs.append(FluidEDACEquationWCSPHOnFluidSolid(
-                    dest=fluid,
-                    sources=self.solids,
-                    nu=nu_edac
-                ))
 
             if len(self.structures) > 0:
                 eqs.append(FluidContinuityEquationWCSPHOnStructure(
                     dest=fluid,
                     sources=self.structures))
 
-                eqs.append(FluidEDACEquationWCSPHOnStructure(
-                    dest=fluid,
-                    sources=self.structures,
-                    nu=nu_edac
-                ))
-
             if len(self.structure_solids) > 0:
                 eqs.append(FluidContinuityEquationWCSPHOnStructureSolid(
                     dest=fluid,
                     sources=self.structure_solids))
-
-                eqs.append(FluidEDACEquationWCSPHOnStructureSolid(
-                    dest=fluid,
-                    sources=self.structure_solids,
-                    nu=nu_edac
-                ))
 
         stage1.append(Group(equations=eqs, real=False))
         # ============================
@@ -839,7 +796,7 @@ class FSIWCSPHScheme(Scheme):
 
             tmp = []
             if len(self.structure_solids) > 0:
-                for boundary in self.structure_solid:
+                for boundary in self.structure_solids:
                     tmp.append(
                         ElasticSolidSetWallVelocityNoSlipUhat(
                             dest=boundary, sources=self.structures))
@@ -888,6 +845,15 @@ class FSIWCSPHScheme(Scheme):
         # stage 2 equations start
         # =========================#
         stage2 = []
+
+        tmp = []
+        for fluid in self.fluids:
+            tmp.append(
+                StateEquation(dest=fluid, sources=None, p0=self.pb_fluid,
+                              rho0=self.rho0_fluid))
+
+        stage2.append(Group(equations=tmp, real=False))
+
         if len(self.solids) > 0:
             eqs = []
             for solid in self.solids:
@@ -913,8 +879,6 @@ class FSIWCSPHScheme(Scheme):
                 eqs.append(
                     FluidSolidWallPressureBCStructureSolid(
                         dest=structure, sources=self.fluids,
-                        p_0=self.pb_fluid,
-                        rho_0=self.rho0_fluid,
                         gx=self.gx, gy=self.gy, gz=self.gz))
                 eqs.append(
                     FluidClampWallPressureStructureSolid(
@@ -934,8 +898,6 @@ class FSIWCSPHScheme(Scheme):
                 eqs.append(
                     FluidSolidWallPressureBCStructure(dest=structure,
                                                       sources=self.fluids,
-                                                      p_0=self.pb_fluid,
-                                                      rho_0=self.rho0_fluid,
                                                       gx=self.gx, gy=self.gy,
                                                       gz=self.gz))
                 eqs.append(
@@ -1065,9 +1027,10 @@ class FSIWCSPHScheme(Scheme):
                     AccelerationOnStructureDueToFluid(dest=structure,
                                                       sources=self.fluids), )
 
-                g4.append(
-                    AccelerationOnStructureDueToFluidViscosity(
-                        dest=structure, sources=self.fluids, nu=self.nu_fluid))
+                if self.nu_fluid > 0.:
+                    g4.append(
+                        AccelerationOnStructureDueToFluidViscosity(
+                            dest=structure, sources=self.fluids, nu=self.nu_fluid))
 
             stage2.append(Group(g4))
 
@@ -1419,7 +1382,6 @@ class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
             ElasticSolidComputeAuHatETVFSun2019,
             AddGravityToStructure,
             BuiFukagawaDampingGraularSPH)
-
 
         nu_edac = self._get_edac_nu()
         all = self.fluids + self.solids

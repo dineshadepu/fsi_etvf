@@ -20,7 +20,8 @@ from pysph.examples.solid_mech.impact import add_properties
 #                                                                create_sphere)
 from pysph.tools.geometry import get_2d_block, rotate
 
-from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
+# from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
+from fsi_wcsph import FSIWCSPHScheme
 
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
@@ -394,31 +395,44 @@ class ElasticGate(Application):
         return [fluid, tank, gate, gate_support]
 
     def create_scheme(self):
-        ctvf = FSIETVFScheme(fluids=['fluid'],
-                             solids=['tank'],
-                             structures=['gate'],
-                             structure_solids=['gate_support'],
-                             dim=2,
-                             h_fluid=0.,
-                             c0_fluid=0.,
-                             nu_fluid=0.,
-                             rho0_fluid=0.,
-                             mach_no_fluid=0.,
-                             mach_no_structure=0.)
+        # ctvf = FSIETVFScheme(fluids=['fluid'],
+        #                      solids=['tank'],
+        #                      structures=['gate'],
+        #                      structure_solids=['gate_support'],
+        #                      dim=2,
+        #                      h_fluid=0.,
+        #                      c0_fluid=0.,
+        #                      nu_fluid=0.,
+        #                      rho0_fluid=0.,
+        #                      mach_no_fluid=0.,
+        #                      mach_no_structure=0.)
 
-        substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
-                                           solids=['tank'],
-                                           structures=['gate'],
-                                           structure_solids=['gate_support'],
-                                           dim=2,
-                                           h_fluid=0.,
-                                           c0_fluid=0.,
-                                           nu_fluid=0.,
-                                           rho0_fluid=0.,
-                                           mach_no_fluid=0.,
-                                           mach_no_structure=0.)
+        # substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
+        #                                    solids=['tank'],
+        #                                    structures=['gate'],
+        #                                    structure_solids=['gate_support'],
+        #                                    dim=2,
+        #                                    h_fluid=0.,
+        #                                    c0_fluid=0.,
+        #                                    nu_fluid=0.,
+        #                                    rho0_fluid=0.,
+        #                                    mach_no_fluid=0.,
+        #                                    mach_no_structure=0.)
 
-        s = SchemeChooser(default='ctvf', substep=substep, ctvf=ctvf)
+        wcsph = FSIWCSPHScheme(fluids=['fluid'],
+                                         solids=['tank'],
+                                         structures=['gate'],
+                                         structure_solids=['gate_support'],
+                                         dim=2,
+                                         h_fluid=0.,
+                                         c0_fluid=0.,
+                                         nu_fluid=0.,
+                                         rho0_fluid=0.,
+                                         mach_no_fluid=0.,
+                                         mach_no_structure=0.)
+
+        # s = SchemeChooser(default='wcsph', substep=substep, wcsph=wcsph)
+        s = SchemeChooser(default='wcsph', wcsph=wcsph)
 
         return s
 

@@ -103,6 +103,8 @@ def find_displacement_index(pa):
                     data=np.zeros(len(pa.x)))
     pa.tip_displacemet_index[index] = 1
 
+    pa.add_output_arrays(['tip_displacemet_index'])
+
 
 class ElasticGate(Application):
     def add_user_options(self, group):
