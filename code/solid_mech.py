@@ -41,6 +41,44 @@ from math import sqrt, acos
 from math import pi as M_PI
 
 
+# ===========================
+# Equations for ULSPH by Gray
+# ===========================
+
+class ElasticSolidContinuityEquationU(Equation):
+    def initialize(self, d_idx, d_arho):
+        d_arho[d_idx] = 0.0
+
+    def loop(self, d_idx, d_arho, d_u, d_v, d_w, s_idx, s_m, s_u,
+             s_v, s_w, DWIJ, VIJ):
+        vij = declare('matrix(3)')
+        vij[0] = d_u[d_idx] - s_u[s_idx]
+        vij[1] = d_v[d_idx] - s_v[s_idx]
+        vij[2] = d_w[d_idx] - s_w[s_idx]
+
+        vijdotdwij = DWIJ[0] * vij[0] + DWIJ[1] * vij[1] + DWIJ[2] * vij[2]
+        d_arho[d_idx] += s_m[s_idx] * vijdotdwij
+
+
+class ElasticSolidContinuityEquationUSolid(Equation):
+    def initialize(self, d_idx, d_arho):
+        d_arho[d_idx] = 0.0
+
+    def loop(self, d_idx, d_arho, d_u, d_v, d_w, s_idx, s_m, s_ub, s_vb, s_wb,
+             DWIJ):
+        vij = declare('matrix(3)')
+        vij[0] = d_u[d_idx] - s_ub[s_idx]
+        vij[1] = d_v[d_idx] - s_vb[s_idx]
+        vij[2] = d_w[d_idx] - s_wb[s_idx]
+
+        vijdotdwij = DWIJ[0] * vij[0] + DWIJ[1] * vij[1] + DWIJ[2] * vij[2]
+        d_arho[d_idx] += s_m[s_idx] * vijdotdwij
+
+# ===========================
+# Equations for ULSPH by Gray
+# ===========================
+
+
 class ElasticSolidContinuityEquationUhat(Equation):
     def initialize(self, d_idx, d_arho):
         d_arho[d_idx] = 0.0

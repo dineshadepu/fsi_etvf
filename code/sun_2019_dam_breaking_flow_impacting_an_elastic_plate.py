@@ -49,7 +49,9 @@ from pysph.tools.geometry import get_2d_block, rotate
 # from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
 from fsi_wcsph import FSIWCSPHScheme
 
-from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
+from fsi_wcsph import (FSIWCSPHScheme, FSIWCSPHFluidsScheme,
+                       FSIWCSPHFluidsScheme, FSIWCSPHFluidsSubSteppingScheme)
+
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
 
@@ -393,8 +395,21 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
                                mach_no_fluid=0.,
                                mach_no_structure=0.)
 
+        wcsph_fluids = FSIWCSPHFluidsScheme(fluids=['fluid'],
+                                            solids=['tank'],
+                                            structures=['gate'],
+                                            structure_solids=['gate_support'],
+                                            dim=2,
+                                            h_fluid=0.,
+                                            c0_fluid=0.,
+                                            nu_fluid=0.,
+                                            rho0_fluid=0.,
+                                            mach_no_fluid=0.,
+                                            mach_no_structure=0.)
+
         # s = SchemeChooser(default='wcsph', substep=substep, wcsph=wcsph)
-        s = SchemeChooser(default='wcsph', wcsph=wcsph)
+        s = SchemeChooser(default='wcsph', wcsph=wcsph,
+                          wcsph_fluids=wcsph_fluids)
 
         return s
 
@@ -521,7 +536,7 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         plt.clf()
         plt.plot(txsun, xdsun, "o", label='Sun et al 2019, MPS-DEM')
         plt.plot(txbogaers, xdbogaers, "^", label='Bogaers 2016, QN-LS')
-        plt.plot(txidelsohn, xdidelsohn, "+", label='Idelsohn 20108, PFEM')
+        plt.plot(txidelsohn, xdidelsohn, "+", label='Idelsohn 2008, PFEM')
         plt.plot(txliu, xdliu, "v", label='Liu 2013, SPH')
 
         plt.plot(t_ctvf, x_ctvf, "-", label='CTVF')

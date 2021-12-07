@@ -21,7 +21,9 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.tools.geometry import get_2d_block, rotate
 
 from fsi_coupling import FSIETVFSubSteppingScheme
-from fsi_wcsph import FSIWCSPHSubSteppingScheme
+# from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
+from fsi_wcsph import (FSIWCSPHScheme, FSIWCSPHSubSteppingScheme,
+                       FSIWCSPHFluidsScheme, FSIWCSPHFluidsSubSteppingScheme)
 
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
@@ -349,7 +351,24 @@ class ElasticGate(Application):
                                                   mach_no_structure=0.,
                                                   gy=0.)
 
-        s = SchemeChooser(default='wcsph', etvf=etvf_substep, wcsph=wcsph_substep)
+        wcsph_fluids_substep = FSIWCSPHFluidsSubSteppingScheme(fluids=['fluid'],
+                                                               solids=['tank'],
+                                                               structures=['gate'],
+                                                               structure_solids=['gate_support'],
+                                                               dt_fluid=1.,
+                                                               dt_solid=1.,
+                                                               dim=2,
+                                                               h_fluid=0.,
+                                                               rho0_fluid=0.,
+                                                               pb_fluid=0.,
+                                                               c0_fluid=0.,
+                                                               nu_fluid=0.,
+                                                               mach_no_fluid=0.,
+                                                               mach_no_structure=0.,
+                                                               gy=0.)
+
+        s = SchemeChooser(default='wcsph', etvf=etvf_substep, wcsph=wcsph_substep,
+                          wcsph_fluids=wcsph_fluids_substep)
 
         return s
 

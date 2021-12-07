@@ -34,8 +34,9 @@ from pysph.examples.solid_mech.impact import add_properties
 #                                                                create_sphere)
 from pysph.tools.geometry import get_2d_block, rotate
 
-# from fsi_coupling import FSIScheme
-from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
+# from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
+from fsi_wcsph import (FSIWCSPHScheme, FSIWCSPHSubSteppingScheme,
+                       FSIWCSPHFluidsScheme, FSIWCSPHFluidsSubSteppingScheme)
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
 
@@ -330,31 +331,57 @@ class WaterEntryOfElasticWedge(Application):
         return [fluid, tank, wedge]
 
     def create_scheme(self):
-        ctvf = FSIETVFScheme(fluids=['fluid'],
-                             solids=['tank'],
-                             structures=['wedge'],
-                             structure_solids=None,
-                             dim=2,
-                             h_fluid=0.,
-                             c0_fluid=0.,
-                             nu_fluid=0.,
-                             rho0_fluid=0.,
-                             mach_no_fluid=0.,
-                             mach_no_structure=0.)
+        # ctvf = FSIETVFScheme(fluids=['fluid'],
+        #                      solids=['tank'],
+        #                      structures=['wedge'],
+        #                      structure_solids=None,
+        #                      dim=2,
+        #                      h_fluid=0.,
+        #                      c0_fluid=0.,
+        #                      nu_fluid=0.,
+        #                      rho0_fluid=0.,
+        #                      mach_no_fluid=0.,
+        #                      mach_no_structure=0.)
 
-        substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
-                                           solids=['tank'],
-                                           structures=['wedge'],
-                                           structure_solids=None,
-                                           dim=2,
-                                           h_fluid=0.,
-                                           c0_fluid=0.,
-                                           nu_fluid=0.,
-                                           rho0_fluid=0.,
-                                           mach_no_fluid=0.,
-                                           mach_no_structure=0.)
+        # substep = FSIETVFSubSteppingScheme(fluids=['fluid'],
+        #                                    solids=['tank'],
+        #                                    structures=['wedge'],
+        #                                    structure_solids=None,
+        #                                    dim=2,
+        #                                    h_fluid=0.,
+        #                                    c0_fluid=0.,
+        #                                    nu_fluid=0.,
+        #                                    rho0_fluid=0.,
+        #                                    mach_no_fluid=0.,
+        #                                    mach_no_structure=0.)
 
-        s = SchemeChooser(default='ctvf', substep=substep, ctvf=ctvf)
+        wcsph = FSIWCSPHScheme(fluids=['fluid'],
+                               solids=['tank'],
+                               structures=['gate'],
+                               structure_solids=None,
+                               dim=2,
+                               h_fluid=0.,
+                               c0_fluid=0.,
+                               nu_fluid=0.,
+                               rho0_fluid=0.,
+                               mach_no_fluid=0.,
+                               mach_no_structure=0.)
+
+        wcsph_fluids = FSIWCSPHFluidsScheme(fluids=['fluid'],
+                                            solids=['tank'],
+                                            structures=['gate'],
+                                            structure_solids=None,
+                                            dim=2,
+                                            h_fluid=0.,
+                                            c0_fluid=0.,
+                                            nu_fluid=0.,
+                                            rho0_fluid=0.,
+                                            mach_no_fluid=0.,
+                                            mach_no_structure=0.)
+
+        # s = SchemeChooser(default='wcsph', substep=substep, wcsph=wcsph)
+        s = SchemeChooser(default='wcsph', wcsph=wcsph,
+                          wcsph_fluids=wcsph_fluids)
 
         return s
 
@@ -368,7 +395,7 @@ class WaterEntryOfElasticWedge(Application):
 
         # print("DT: %s" % dt)
         dt = 2. * 1e-7
-        tf = 0.003
+        tf = 0.0025
 
         self.scheme.configure_solver(dt=dt, tf=tf, pfreq=200)
 
@@ -434,38 +461,77 @@ class WaterEntryOfElasticWedge(Application):
         info = self.read_info(fname)
         files = self.output_files
 
+        # Fig 21 of Sun 2021, \delta SPH - SPIM
         data = load(files[0])
         arrays = data['arrays']
         pa = arrays['wedge']
-        index = np.where(pa.tip_displacemet_index == 1)[0][0]
+        # Displacement of the middle of the wedge (Index B)
+        index = np.where(pa.B_index == 1)[0][0]
         y_0 = pa.y[index]
 
         files = files[0::1]
-        t, amplitude = [], []
+        t_ctvf, yatbctvf = [], []
         for sd, wedge in iter_output(files, 'wedge'):
             _t = sd['t']
-            t.append(_t)
-            amplitude.append((wedge.y[index] - y_0) * 1)
+            t_ctvf.append(_t)
+            yatbctvf.append(abs(y_0 - wedge.y[index]))
+
+        # Numerical data
+        path = os.path.abspath(__file__)
+        directory = os.path.dirname(path)
+
+        # load the data
+        # The data of mid point deflection is extracted from "A coupled
+        # smoothed  particle hydrodynamic and finite particle method: An
+        # efficient approach for fluid-solid interaction problems involving
+        # free-surface flow and solid failure"
+        data_y_at_b_disp_analytical = np.loadtxt(
+            os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_y_displacement_analytical.csv'),
+            delimiter=',')
+
+        data_y_at_b_disp_fourey_2010 = np.loadtxt(
+            os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_y_displacement_fourey_2010_sph_fem.csv'),
+            delimiter=',')
+
+        data_y_at_b_disp_li_2015 = np.loadtxt(
+            os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_y_displacement_li_2015_sph_fem.csv'),
+            delimiter=',')
+
+        tyatbanalytical, yatbanalytical = data_y_at_b_disp_analytical[:, 0], data_y_at_b_disp_analytical[:, 1]
+        tyatbfourey, yatbfourey = data_y_at_b_disp_fourey_2010[:, 0], data_y_at_b_disp_fourey_2010[:, 1]
+        tyatbli, yatbli = data_y_at_b_disp_li_2015[:, 0], data_y_at_b_disp_li_2015[:, 1]
 
         res = os.path.join(self.output_dir, "results.npz")
-        np.savez(res, t=t, amplitude=amplitude)
+        np.savez(res,
+                 tyatbanalytical=tyatbanalytical,
+                 yatbanalytical=yatbanalytical,
+
+                 tyatbfourey=tyatbfourey,
+                 yatbfourey=yatbfourey,
+
+                 tyatbli=tyatbli,
+                 yatbli=yatbli,
+
+                 t_ctvf=t_ctvf,
+                 yatbctvf=yatbctvf)
 
         plt.clf()
-        plt.plot(t, amplitude, "-", label='Simulated')
 
-        # exact solution
-        t = np.linspace(0., 1., 1000)
-        y = -6.849 * 1e-5 * np.ones_like(t)
-        plt.plot(t, y, "-", label='Exact')
+        # yatbanalytical reads y_at_b_analytical
+        plt.plot(tyatbanalytical, yatbanalytical, "o-", label='Analytical')
+        plt.plot(tyatbfourey, yatbfourey, "^-", label='Fourey 2010, SPH-FEM')
+        plt.plot(tyatbli, yatbli, "+-", label='Li 2015, SPH-FEM')
+        plt.plot(t_ctvf, yatbctvf, "-", label='CTVF')
+        plt.title('Displacement at mid point of wedge')
 
         plt.xlabel('t')
-        plt.ylabel('amplitude')
+        plt.ylabel('Displacement')
         plt.legend()
-        fig = os.path.join(os.path.dirname(fname), "amplitude_with_t.png")
+        fig = os.path.join(os.path.dirname(fname), "b_displacement_with_t.png")
         plt.savefig(fig, dpi=300)
 
 
 if __name__ == '__main__':
     app = WaterEntryOfElasticWedge()
     app.run()
-    # app.post_process(app.info_filename)
+    app.post_process(app.info_filename)

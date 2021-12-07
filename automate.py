@@ -436,6 +436,12 @@ class Ng2020ElasticDamBreak(Problem):
             #     tf=0.4,
             #     ), 'CTVF')
 
+            'wcsph_fluids': (dict(
+                scheme='wcsph_fluids',
+                pfreq=500,
+                tf=0.4,
+                ), 'wcsph_fluids'),
+
             'wcsph': (dict(
                 scheme='wcsph',
                 pfreq=500,
@@ -548,6 +554,12 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
                 pfreq=300,
                 tf=0.7,
                 ), 'WCSPH'),
+
+            'wcsph_fluids': (dict(
+                scheme='wcsph_fluids',
+                pfreq=300,
+                tf=0.7,
+                ), 'WCSPH fluids'),
         }
 
         self.cases = [
@@ -619,12 +631,11 @@ class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
 
         # Base case info
         self.case_info = {
-            'ctvf': (dict(
-                scheme='ctvf',
-                pfreq=200,
-                tf=0.003,
-                no_rogers_eqns=None
-                ), 'CTVF'),
+            'wcsph': (dict(
+                scheme='wcsph',
+                pfreq=300,
+                tf=0.0025,
+                ), 'WCSPH'),
 
             # 'rogers': (dict(
             #     scheme='ctvf',
@@ -633,6 +644,7 @@ class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
             #     rogers_eqns=None
             #     ), 'Rogers Scheme'),
         }
+
 
         self.cases = [
             Simulation(get_path(name), cmd,
@@ -644,6 +656,46 @@ class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
 
     def run(self):
         self.make_output_dir()
+        self.plot_figures()
+
+    def plot_figures(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        rand_case = (list(data.keys())[0])
+
+        tyatbanalytical = data[rand_case]['tyatbanalytical']
+        yatbanalytical = data[rand_case]['yatbanalytical']
+        tyatbfourey = data[rand_case]['tyatbfourey']
+        yatbfourey = data[rand_case]['yatbfourey']
+        tyatbli = data[rand_case]['tyatbli']
+        yatbli = data[rand_case]['yatbli']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        plt.plot(tyatbanalytical, yatbanalytical, "o-", label='Analytical')
+        plt.plot(tyatbfourey, yatbfourey, "^-", label='Fourey 2010, SPH-FEM')
+        plt.plot(tyatbli, yatbli, "+-", label='Li 2015, SPH-FEM')
+
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            yatbctvf = data[name]['yatbctvf']
+
+            plt.plot(t_ctvf, yatbctvf, label=self.case_info[name][1])
+
+        plt.xlabel('t')
+        plt.ylabel('Displacement')
+        plt.legend()
+        # plt.tight_layout(pad=0)
+        plt.savefig(self.output_path('b_displacement_with_t.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot x amplitude
+        # ==================================
 
 
 class Hwang2014RollingTankWithEmbeddedHangingElasticBeam(Problem):

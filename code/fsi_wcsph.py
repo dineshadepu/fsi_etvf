@@ -532,7 +532,7 @@ class AccelerationOnStructureDueToFluidViscosity(Equation):
         d_aw[d_idx] += fac * vij[2]
 
 
-class FSIWCSPHScheme(Scheme):
+class FSIWCSPHFluidsScheme(Scheme):
     def __init__(self, fluids, structures, solids, structure_solids, dim,
                  h_fluid, c0_fluid, nu_fluid, rho0_fluid, mach_no_fluid,
                  mach_no_structure, dt_fluid=1., dt_solid=1., pb_fluid=0.0,
@@ -1296,7 +1296,7 @@ class FSIWCSPHScheme(Scheme):
         return nu
 
 
-class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
+class FSIWCSPHFluidsSubSteppingScheme(FSIWCSPHFluidsScheme):
     def attributes_changed(self):
         super().attributes_changed()
 
@@ -1729,6 +1729,1204 @@ class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
                             dest=structure,
                             sources=[structure],
                             mach_no=self.mach_no_structure))
+
+                g4.append(
+                    AccelerationOnStructureDueToFluid(dest=structure,
+                                                      sources=self.fluids), )
+
+                if self.nu_fluid > 0.:
+                    g4.append(
+                        AccelerationOnStructureDueToFluidViscosity(
+                            dest=structure, sources=self.fluids,
+                            nu=self.nu_fluid))
+
+            stage1_stucture_eqs.append(Group(g4))
+
+            # Add gravity
+            g5 = []
+            for structure in self.structures:
+                g5.append(
+                    AddGravityToStructure(dest=structure, sources=None,
+                                          gx=self.gx, gy=self.gy,
+                                          gz=self.gz))
+
+                if self.damping == True:
+                    g5.append(
+                        BuiFukagawaDampingGraularSPH(
+                            dest=structure, sources=None,
+                            damping_coeff=self.damping_coeff))
+
+            stage1_stucture_eqs.append(Group(g5))
+
+        g1 = []
+        if len(self.structures) > 0.:
+            for structure in self.structures:
+                g1.append(SolidsStage3(dest=structure, sources=None,
+                                       dt=self.dt_solid))
+            stage1_stucture_eqs.append(Group(equations=g1))
+
+        stage1.append(Group(equations=stage1_stucture_eqs,
+                            iterate=True, max_iterations=self.dt_factor,
+                            min_iterations=self.dt_factor))
+
+        return stage1
+
+
+class FSIWCSPHScheme(Scheme):
+    def __init__(self, fluids, structures, solids, structure_solids, dim,
+                 h_fluid, c0_fluid, nu_fluid, rho0_fluid, mach_no_fluid,
+                 mach_no_structure, dt_fluid=1., dt_solid=1., pb_fluid=0.0,
+                 gx=0.0, gy=0.0, gz=0.0, alpha_solid=1.0,
+                 beta_solid=0.0, alpha_fluid=0.0, edac_alpha=0.5,
+                 pst="sun2019", edac=False):
+        """Parameters
+        ----------
+
+        fluids: list
+            List of names of fluid particle arrays.
+        solids: list
+            List of names of solid particle arrays (or boundaries).
+        stuctures: list
+            List of names of solid particle arrays (or boundaries).
+        structure_solids: list
+            List of names of solid particle arrays (or boundaries).
+        dim: int
+            Dimensionality of the problem.
+        h_fluid: float
+            Reference smoothing length of fluid medium.
+        c0_fluid: float
+            Reference speed of sound of fluid medium.
+        nu_fluid: float
+            Real viscosity of the fluid, defaults to no viscosity.
+        rho_fluid: float
+            Reference density of fluid medium.
+        gx, gy, gz: float
+            Body force acceleration components.
+        alpha_solid: float
+            Coefficient for artificial viscosity for solid.
+        beta_solid: float
+            Coefficient for artificial viscosity for solid.
+        edac: bool
+            Use edac equation for fluid
+        damping: bool
+            Use damping for the elastic structure part
+        damping_coeff: float
+            The damping coefficient for the elastic structure
+        """
+        self.fluids = fluids
+        self.solids = solids
+        self.structures = structures
+        if structure_solids is None:
+            self.structure_solids = []
+        else:
+            self.structure_solids = structure_solids
+        self.dim = dim
+        self.h_fluid = h_fluid
+        self.c0_fluid = c0_fluid
+        self.nu_fluid = nu_fluid
+        self.rho0_fluid = rho0_fluid
+        self.mach_no_fluid = mach_no_fluid
+        self.mach_no_structure = mach_no_structure
+        self.artificial_stress_eps = 0.3
+        self.dt_fluid = dt_fluid
+        self.dt_solid = dt_solid
+        self.pb_fluid = pb_fluid
+        self.gx = gx
+        self.gy = gy
+        self.gz = gz
+        self.alpha_solid = alpha_solid
+        self.beta_solid = beta_solid
+        self.alpha_fluid = alpha_fluid
+        self.edac_alpha = edac_alpha
+        self.edac = edac
+        self.wall_pst = True
+        self.damping = False
+        self.damping_coeff = 0.002
+        self.solid_velocity_bc = True
+
+        # common properties
+        self.solver = None
+        self.kernel_factor = 2
+
+        self.attributes_changed()
+
+    def add_user_options(self, group):
+        group.add_argument("--alpha-fluid", action="store", type=float,
+                           dest="alpha_fluid",
+                           default=0.1,
+                           help="Alpha for the artificial viscosity in fluid.")
+
+        group.add_argument("--alpha-solid", action="store", type=float,
+                           dest="alpha_solid",
+                           default=1,
+                           help="Alpha for the artificial viscosity in solid.")
+
+        group.add_argument("--beta-solid", action="store", type=float,
+                           dest="beta_solid",
+                           default=0.0,
+                           help="Beta for the artificial viscosity in solid.")
+
+        group.add_argument("--edac-alpha", action="store", type=float,
+                           dest="edac_alpha", default=None,
+                           help="Alpha for the EDAC scheme viscosity.")
+
+        add_bool_argument(group, 'solid-velocity-bc', dest='solid_velocity_bc',
+                          default=True,
+                          help='Apply velocity bc to solids in Elastic dynamics')
+
+        add_bool_argument(group, 'wall-pst', dest='wall_pst',
+                          default=True, help='Add wall as PST source')
+
+        add_bool_argument(group, 'damping',
+                          dest='damping',
+                          default=False,
+                          help='Use damping')
+
+        group.add_argument("--damping-coeff", action="store",
+                           dest="damping_coeff", default=0.000, type=float,
+                           help="Damping coefficient for Bui")
+
+    def consume_user_options(self, options):
+        vars = ['alpha_fluid', 'alpha_solid', 'beta_solid',
+                'edac_alpha', 'wall_pst', 'damping', 'damping_coeff']
+        data = dict((var, self._smart_getattr(options, var)) for var in vars)
+        self.configure(**data)
+
+    def attributes_changed(self):
+        if self.pb_fluid is not None:
+            self.use_tvf = abs(self.pb_fluid) > 1e-14
+        if self.h_fluid is not None and self.c0_fluid is not None:
+            self.art_nu = self.edac_alpha * self.h_fluid * self.c0_fluid / 8
+
+    def configure_solver(self, kernel=None, integrator_cls=None,
+                         extra_steppers=None, **kw):
+        from pysph.base.kernels import QuinticSpline
+        from pysph.sph.wc.gtvf import GTVFIntegrator
+        from solid_mech import (GTVFSolidMechStepEDAC, SolidMechStep)
+        kernel = QuinticSpline(dim=self.dim)
+        steppers = {}
+        if extra_steppers is not None:
+            steppers.update(extra_steppers)
+
+        # fluid stepper
+        step_cls = EDACGTVFStep
+        cls = (integrator_cls
+               if integrator_cls is not None else GTVFIntegrator)
+
+        for fluid in self.fluids:
+            if fluid not in steppers:
+                steppers[fluid] = step_cls()
+        integrator = cls(**steppers)
+
+        # structure stepper
+        if self.edac is True:
+            step_cls = GTVFSolidMechStepEDAC
+        else:
+            step_cls = SolidMechStep
+
+        for name in self.structures:
+            if name not in steppers:
+                steppers[name] = step_cls()
+
+        integrator = cls(**steppers)
+
+        from pysph.solver.solver import Solver
+        self.solver = Solver(dim=self.dim, integrator=integrator,
+                             kernel=kernel, **kw)
+
+    def get_equations(self):
+        # from pysph.sph.wc.gtvf import (MomentumEquationArtificialStress)
+        from fluids_wcsph import (
+            FluidSetWallVelocityUFreeSlipAndNoSlip,
+
+            FluidContinuityEquationWCSPHOnFluid,
+            FluidContinuityEquationWCSPHOnFluidSolid,
+
+            FluidEDACEquationWCSPHOnFluid,
+            FluidEDACEquationWCSPHOnFluidSolid,
+
+            StateEquation,
+            FluidSolidWallPressureBCFluidSolid,
+            FluidClampWallPressureFluidSolid,
+            FluidMomentumEquationPressureGradient,
+
+            MomentumEquationViscosity as FluidMomentumEquationViscosity,
+            MomentumEquationArtificialViscosity as
+            FluidMomentumEquationArtificialViscosity)
+
+        from solid_mech import (
+            ElasticSolidSetWallVelocityNoSlipU,
+            ElasticSolidSetWallVelocityNoSlipUhat,
+
+            ElasticSolidContinuityEquationU,
+            VelocityGradient2D,
+
+            ElasticSolidContinuityEquationUSolid,
+            VelocityGradient2DSolid,
+
+            HookesDeviatoricStressRate,
+
+            IsothermalEOS,
+
+            AdamiBoundaryConditionExtrapolateNoSlip,
+
+            ElasticSolidMonaghanArtificialViscosity,
+            AddGravityToStructure,
+            BuiFukagawaDampingGraularSPH)
+
+        from pysph.sph.solid_mech.basic import (
+            MonaghanArtificialStress,
+
+            MomentumEquationWithStress as ElasticSolidMomentumEquationWithStress,
+        )
+
+
+        nu_edac = self._get_edac_nu()
+        all = self.fluids + self.solids
+        stage1 = []
+
+        # =========================#
+        # fluid equations
+        # =========================#
+        # ============================
+        # Continuity and EDAC equation
+        # ============================
+        eqs = []
+        for fluid in self.fluids:
+            eqs.append(FluidContinuityEquationWCSPHOnFluid(
+                dest=fluid,
+                sources=self.fluids))
+
+            if len(self.solids) > 0:
+                eqs.append(FluidContinuityEquationWCSPHOnFluidSolid(
+                    dest=fluid,
+                    sources=self.solids))
+
+            if len(self.structures) > 0:
+                eqs.append(FluidContinuityEquationWCSPHOnStructure(
+                    dest=fluid,
+                    sources=self.structures))
+
+            if len(self.structure_solids) > 0:
+                eqs.append(FluidContinuityEquationWCSPHOnStructureSolid(
+                    dest=fluid,
+                    sources=self.structure_solids))
+
+        stage1.append(Group(equations=eqs, real=False))
+        # ============================
+        # Continuity and EDAC equation
+        # ============================
+        # =========================#
+        # fluid equations ends
+        # =========================#
+
+        # =========================#
+        # structure equations
+        # =========================#
+
+        all = self.structures + self.structure_solids
+
+        if self.solid_velocity_bc is True:
+            tmp = []
+            if len(self.structure_solids) > 0:
+                for boundary in self.structure_solids:
+                    tmp.append(
+                        ElasticSolidSetWallVelocityNoSlipU(
+                            dest=boundary, sources=self.structures))
+                stage1.append(Group(equations=tmp))
+
+            tmp = []
+            if len(self.structure_solids) > 0:
+                for boundary in self.structure_solids:
+                    tmp.append(
+                        ElasticSolidSetWallVelocityNoSlipUhat(
+                            dest=boundary, sources=self.structures))
+                stage1.append(Group(equations=tmp))
+
+        # ===================================================== #
+        # Continuity, Velocity gradient and Hooke's Stress rate
+        # ===================================================== #
+        g1 = []
+        if len(self.structures) > 0:
+            for structure in self.structures:
+                g1.append(ElasticSolidContinuityEquationU(
+                    dest=structure, sources=self.structures))
+                g1.append(
+                    VelocityGradient2D(
+                        dest=structure, sources=self.structures))
+
+                if len(self.structure_solids) > 0:
+                    g1.append(
+                        ElasticSolidContinuityEquationUSolid(dest=structure,
+                                                             sources=self.structure_solids))
+
+                    g1.append(
+                        VelocityGradient2DSolid(dest=structure, sources=self.structure_solids))
+
+            stage1.append(Group(equations=g1))
+
+            g2 = []
+            for structure in self.structures:
+                g2.append(
+                    MonaghanArtificialStress(dest=structure, sources=None,
+                                             eps=self.artificial_stress_eps))
+
+                g2.append(
+                    HookesDeviatoricStressRate(dest=structure, sources=None))
+
+            stage1.append(Group(equations=g2))
+        # =========================#
+        # structure equations ends
+        # =========================#
+
+        # =========================#
+        # stage 2 equations start
+        # =========================#
+        stage2 = []
+
+        tmp = []
+        for fluid in self.fluids:
+            tmp.append(
+                StateEquation(dest=fluid, sources=None, p0=self.pb_fluid,
+                              rho0=self.rho0_fluid))
+
+        stage2.append(Group(equations=tmp, real=False))
+
+        if len(self.solids) > 0:
+            eqs = []
+            for solid in self.solids:
+                eqs.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(dest=solid,
+                                                           sources=self.fluids))
+                eqs.append(
+                    FluidSolidWallPressureBCFluidSolid(dest=solid, sources=self.fluids,
+                                                       gx=self.gx, gy=self.gy, gz=self.gz))
+                eqs.append(
+                    FluidClampWallPressureFluidSolid(dest=solid, sources=None,))
+
+            stage2.append(Group(equations=eqs, real=False))
+
+        # FSI coupling equations, set the pressure
+        if len(self.structure_solids) > 0:
+            eqs = []
+            for structure in self.structure_solids:
+                eqs.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(dest=structure,
+                                                           sources=self.fluids))
+
+                eqs.append(
+                    FluidSolidWallPressureBCStructureSolid(
+                        dest=structure, sources=self.fluids,
+                        gx=self.gx, gy=self.gy, gz=self.gz))
+                eqs.append(
+                    FluidClampWallPressureStructureSolid(
+                        dest=structure, sources=None))
+
+            stage2.append(Group(equations=eqs, real=False))
+        # FSI coupling equations, set the pressure
+
+        # FSI coupling equations, set the pressure
+        if len(self.structures) > 0:
+            eqs = []
+            for structure in self.structures:
+                eqs.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(
+                        dest=structure, sources=self.fluids))
+
+                eqs.append(
+                    FluidSolidWallPressureBCStructure(dest=structure,
+                                                      sources=self.fluids,
+                                                      gx=self.gx, gy=self.gy,
+                                                      gz=self.gz))
+                eqs.append(
+                    FluidClampWallPressureStructure(dest=structure, sources=None))
+
+            stage2.append(Group(equations=eqs, real=False))
+        # FSI coupling equations, set the pressure
+
+        eqs = []
+        for fluid in self.fluids:
+            if self.alpha_fluid > 0.:
+                eqs.append(
+                    FluidMomentumEquationArtificialViscosity(
+                        dest=fluid,
+                        sources=self.fluids+self.solids+self.structures
+                        + self.structure_solids,
+                        c0=self.c0_fluid,
+                        alpha=self.alpha_fluid
+                    )
+                )
+
+            if self.nu_fluid > 0.:
+                eqs.append(
+                    FluidLaminarViscosityFluid(
+                        dest=fluid, sources=self.fluids, nu=self.nu_fluid
+                    ))
+
+                eqs.append(
+                    FluidLaminarViscosityFluidSolid(
+                        dest=fluid, sources=self.solids, nu=self.nu_fluid
+                    ))
+
+                if len(self.structures) > 0:
+                    eqs.append(
+                        FluidLaminarViscosityStructure(
+                            dest=fluid, sources=self.structures,
+                            nu=self.nu_fluid))
+
+                if len(self.structure_solids) > 0:
+                    eqs.append(
+                        FluidLaminarViscosityStructureSolid(
+                            dest=fluid, sources=self.structure_solids,
+                            nu=self.nu_fluid))
+
+            eqs.append(
+                FluidMomentumEquationPressureGradient(
+                    dest=fluid, sources=self.fluids + self.solids,
+                    gx=self.gx, gy=self.gy, gz=self.gz), )
+
+            if len(self.structure_solids + self.structures) > 0.:
+                eqs.append(
+                    AccelerationOnFluidDueToStructure(
+                        dest=fluid,
+                        sources=self.structures + self.structure_solids),
+                )
+
+        stage2.append(Group(equations=eqs, real=True))
+        # ============================================
+        # fluid momentum equations ends
+        # ============================================
+
+        # ============================================
+        # structures momentum equations
+        # ============================================
+        g1 = []
+        g2 = []
+        g3 = []
+        g4 = []
+
+        if len(self.structures) > 0.:
+            for structure in self.structures:
+                g2.append(IsothermalEOS(structure, sources=None))
+            stage2.append(Group(g2))
+
+        # -------------------
+        # boundary conditions
+        # -------------------
+        if len(self.structure_solids) > 0:
+            for boundary in self.structure_solids:
+                g3.append(
+                    AdamiBoundaryConditionExtrapolateNoSlip(
+                        dest=boundary, sources=self.structures, gx=self.gx,
+                        gy=self.gy, gz=self.gz))
+            stage2.append(Group(g3))
+
+        # -------------------
+        # solve momentum equation for solid
+        # -------------------
+        if len(self.structures) > 0.:
+            g4 = []
+            for structure in self.structures:
+                # add only if there is some positive value
+                if self.alpha_solid > 0. or self.beta_solid > 0.:
+                    g4.append(
+                        ElasticSolidMonaghanArtificialViscosity(
+                            dest=structure,
+                            sources=self.structures + self.structure_solids,
+                            alpha=self.alpha_solid,
+                            beta=self.beta_solid))
+
+                g4.append(
+                    ElasticSolidMomentumEquationWithStress(
+                        dest=structure,
+                        sources=self.structures + self.structure_solids))
+
+                g4.append(
+                    AccelerationOnStructureDueToFluid(dest=structure,
+                                                      sources=self.fluids), )
+
+                if self.nu_fluid > 0.:
+                    g4.append(
+                        AccelerationOnStructureDueToFluidViscosity(
+                            dest=structure, sources=self.fluids, nu=self.nu_fluid))
+
+            stage2.append(Group(g4))
+
+            g5 = []
+            for structure in self.structures:
+                g5.append(
+                    AddGravityToStructure(dest=structure, sources=None,
+                                          gx=self.gx, gy=self.gy,
+                                          gz=self.gz))
+
+                if self.damping == True:
+                    g5.append(
+                        BuiFukagawaDampingGraularSPH(
+                            dest=structure, sources=None,
+                            damping_coeff=self.damping_coeff))
+
+            stage2.append(Group(g5))
+
+        return MultiStageEquations([stage1, stage2])
+
+    def setup_properties(self, particles, clean=True):
+        from solid_mech import (get_shear_modulus, get_speed_of_sound)
+
+        pas = dict([(p.name, p) for p in particles])
+        for fluid in self.fluids:
+            pa = pas[fluid]
+
+            add_properties(pa, 'u0', 'v0', 'w0', 'x0', 'y0', 'z0', 'rho0',
+                           'arho', 'ap', 'arho', 'p0', 'uhat', 'vhat', 'what',
+                           'auhat', 'avhat', 'awhat', 'h_b', 'V', 'div_r', 'cs')
+
+            pa.h_b[:] = pa.h[:]
+
+            if 'c0_ref' not in pa.constants:
+                pa.add_constant('c0_ref', self.c0_fluid)
+                pa.add_constant('p_ref', self.rho0_fluid * self.c0_fluid**2.)
+            pa.cs[:] = self.c0_fluid
+            pa.add_output_arrays(['p'])
+
+            if 'wdeltap' not in pa.constants:
+                kernel = QuinticSpline(dim=self.dim)
+                wdeltap = kernel.kernel(rij=pa.h[0], h=pa.h[0])
+                pa.add_constant('wdeltap', wdeltap)
+
+            if 'n' not in pa.constants:
+                pa.add_constant('n', 4.)
+
+            add_boundary_identification_properties(pa)
+
+            pa.h_b[:] = pa.h
+
+        for solid in self.solids:
+            pa = pas[solid]
+
+            add_properties(pa, 'rho', 'V', 'wij2', 'wij', 'uhat', 'vhat',
+                           'what', 'ug', 'vf', 'vg', 'wg', 'uf', 'wf', 'ugfs',
+                           'vgfs', 'wgfs', 'ughatns', 'vghatns', 'wghatns',
+                           'ughatfs', 'vghatfs', 'wghatfs',
+                           'ugns', 'vgns', 'wgns')
+
+            # for normals
+            pa.add_property('normal', stride=3)
+            pa.add_output_arrays(['normal'])
+            pa.add_property('normal_tmp', stride=3)
+
+            name = pa.name
+
+            props = ['m', 'rho', 'h']
+            for p in props:
+                x = pa.get(p)
+                if numpy.all(x < 1e-12):
+                    msg = f'WARNING: cannot compute normals "{p}" is zero'
+                    print(msg)
+
+            seval = SPHEvaluator(
+                arrays=[pa], equations=[
+                    Group(
+                        equations=[ComputeNormals(dest=name, sources=[name])]),
+                    Group(
+                        equations=[SmoothNormals(dest=name, sources=[name])]),
+                ], dim=self.dim)
+            seval.evaluate()
+
+        # Add fsi props
+        for structure in self.structures:
+            pa = pas[structure]
+
+            add_properties(pa, 'm_fsi', 'p_fsi', 'rho_fsi', 'V', 'wij2', 'wij',
+                           'uhat', 'vhat', 'what', 'ap',
+                           'r00', 'r01', 'r02', 'r11', 'r12', 'r22')
+            add_properties(pa, 'div_r')
+            # add_properties(pa, 'p_fsi', 'wij', 'm_fsi', 'rho_fsi')
+
+            # Adami boundary conditions. SetWallVelocity
+            add_properties(pa, 'ug', 'vf', 'vg', 'wg', 'uf', 'wf')
+            add_properties(pa, 'ugfs', 'vgfs', 'wgfs')
+
+            add_properties(pa, 'ughatns', 'vghatns', 'wghatns')
+            add_properties(pa, 'ughatfs', 'vghatfs', 'wghatfs')
+
+            # No slip boundary conditions for viscosity force
+            add_properties(pa, 'ugns', 'vgns', 'wgns')
+
+            # pa.h_b[:] = pa.h[:]
+            # force on structure due to fluid
+            add_properties(pa, 'au_fluid', 'av_fluid', 'aw_fluid')
+
+            # for normals
+            pa.add_property('normal', stride=3)
+            pa.add_output_arrays(['normal'])
+            pa.add_property('normal_tmp', stride=3)
+
+            name = pa.name
+
+            props = ['m', 'rho', 'h']
+            for p in props:
+                x = pa.get(p)
+                if numpy.all(x < 1e-12):
+                    msg = f'WARNING: cannot compute normals "{p}" is zero'
+                    print(msg)
+
+            seval = SPHEvaluator(
+                arrays=[pa], equations=[
+                    Group(
+                        equations=[ComputeNormals(dest=name, sources=[name])]),
+                    Group(
+                        equations=[SmoothNormals(dest=name, sources=[name])]),
+                ], dim=self.dim)
+            seval.evaluate()
+
+        for solid in self.structure_solids:
+            pa = pas[solid]
+
+            add_properties(pa, 'm_fsi', 'p_fsi', 'rho_fsi', 'rho', 'V', 'wij2',
+                           'wij', 'uhat', 'vhat', 'what',
+                           'r00', 'r01', 'r02', 'r11', 'r12', 'r22')
+            # add_properties(pa, 'p_fsi', 'wij', 'm_fsi', 'rho_fsi')
+
+            # Adami boundary conditions. SetWallVelocity
+            add_properties(pa, 'ug', 'vf', 'vg', 'wg', 'uf', 'wf')
+            add_properties(pa, 'ugfs', 'vgfs', 'wgfs')
+
+            add_properties(pa, 'ughatns', 'vghatns', 'wghatns')
+            add_properties(pa, 'ughatfs', 'vghatfs', 'wghatfs')
+
+            # No slip boundary conditions for viscosity force
+            add_properties(pa, 'ugns', 'vgns', 'wgns')
+
+            # force on structure due to fluid
+            add_properties(pa, 'au_fluid', 'av_fluid', 'aw_fluid')
+            # pa.h_b[:] = pa.h[:]
+
+            # for normals
+            pa.add_property('normal', stride=3)
+            pa.add_output_arrays(['normal'])
+            pa.add_property('normal_tmp', stride=3)
+
+            name = pa.name
+
+            props = ['m', 'rho', 'h']
+            for p in props:
+                x = pa.get(p)
+                if numpy.all(x < 1e-12):
+                    msg = f'WARNING: cannot compute normals "{p}" is zero'
+                    print(msg)
+
+            seval = SPHEvaluator(
+                arrays=[pa], equations=[
+                    Group(
+                        equations=[ComputeNormals(dest=name, sources=[name])]),
+                    Group(
+                        equations=[SmoothNormals(dest=name, sources=[name])]),
+                ], dim=self.dim)
+            seval.evaluate()
+
+        # add the elastic dynamics properties
+        for structure in self.structures:
+            # we expect the solid to have Young's modulus, Poisson ration as
+            # given
+            pa = pas[structure]
+
+            # add the properties that are used by all the schemes
+            add_properties(pa, 'cs', 'v00', 'v01', 'v02', 'v10', 'v11', 'v12',
+                           'v20', 'v21', 'v22', 's00', 's01', 's02', 's11',
+                           's12', 's22', 'as00', 'as01', 'as02', 'as11',
+                           'as12', 'as22', 'arho', 'au', 'av', 'aw')
+
+            # for isothermal eqn
+            pa.rho_ref[:] = pa.rho[:]
+
+            # this will change
+            kernel = QuinticSpline(dim=self.dim)
+            wdeltap = kernel.kernel(rij=pa.spacing0[0], h=pa.h[0])
+            pa.add_constant('wdeltap', wdeltap)
+
+            # set the shear modulus G
+            pa.add_property('G')
+
+            # set the speed of sound
+            for i in range(len(pa.x)):
+                cs = get_speed_of_sound(pa.E[i], pa.nu[i], pa.rho_ref[i])
+                G = get_shear_modulus(pa.E[i], pa.nu[i])
+
+                pa.G[i] = G
+                pa.cs[i] = cs
+
+            # auhat properties are needed for gtvf, etvf but not for gray. But
+            # for the compatability with the integrator we will add
+            add_properties(pa, 'auhat', 'avhat', 'awhat', 'uhat', 'vhat',
+                           'what')
+
+            add_properties(pa, 'sigma00', 'sigma01', 'sigma02', 'sigma11',
+                           'sigma12', 'sigma22')
+
+            # output arrays
+            pa.add_output_arrays(['sigma00', 'sigma01', 'sigma11'])
+
+            # for boundary identification and for sun2019 pst
+            pa.add_property('normal', stride=3)
+            pa.add_property('normal_tmp', stride=3)
+            pa.add_property('normal_norm')
+
+            # check for boundary particle
+            pa.add_property('is_boundary', type='int')
+
+            # used to set the particles near the boundary
+            pa.add_property('h_b')
+
+            # for edac
+            if self.edac is True:
+                add_properties(pa, 'ap')
+
+            # update the h if using wendlandquinticc4
+            pa.add_output_arrays(['p'])
+
+        for boundary in self.structure_solids:
+            pa = pas[boundary]
+            pa.add_property('wij')
+
+            # for adami boundary condition
+            add_properties(pa, 'ug', 'vg', 'wg', 'uf', 'vf', 'wf', 's00',
+                           's01', 's02', 's11', 's12', 's22', 'cs', 'uhat',
+                           'vhat', 'what', 'ub', 'vb', 'wb', 'ubhat', 'vbhat',
+                           'wbhat')
+
+            cs = np.ones_like(pa.x) * get_speed_of_sound(
+                pa.E[0], pa.nu[0], pa.rho_ref[0])
+            pa.cs[:] = cs[:]
+
+            pa.add_property('ughat')
+            pa.add_property('vghat')
+            pa.add_property('wghat')
+
+    def get_solver(self):
+        return self.solver
+
+    def _get_edac_nu(self):
+        if self.art_nu > 0:
+            nu = self.art_nu
+            print(self.art_nu)
+            print("Using artificial viscosity for EDAC with nu = %s" % nu)
+        else:
+            nu = self.nu
+            print("Using real viscosity for EDAC with nu = %s" % self.nu)
+        return nu
+
+
+class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
+    def attributes_changed(self):
+        super().attributes_changed()
+
+        self.dt_factor = int(self.dt_fluid / self.dt_solid) + 1
+        self.dt_fluid_simulated = self.dt_factor * self.dt_solid
+
+    def configure_solver(self, kernel=None, integrator_cls=None,
+                         extra_steppers=None, **kw):
+        from pysph.base.kernels import QuinticSpline
+        from pysph.sph.wc.gtvf import GTVFIntegrator
+        from solid_mech import (GTVFSolidMechStepEDAC, SolidMechStep)
+        kernel = QuinticSpline(dim=self.dim)
+        steppers = {}
+        if extra_steppers is not None:
+            steppers.update(extra_steppers)
+
+        # fluid stepper
+        step_cls = EDACGTVFStep
+        cls = (integrator_cls
+               if integrator_cls is not None else SubSteppingIntegrator)
+
+        for fluid in self.fluids:
+            if fluid not in steppers:
+                steppers[fluid] = step_cls()
+        integrator = cls(**steppers)
+
+        # structure stepper
+        if self.edac is True:
+            step_cls = GTVFSolidMechStepEDAC
+        else:
+            step_cls = SolidMechStep
+
+        for name in self.structures:
+            if name not in steppers:
+                steppers[name] = step_cls()
+
+        integrator = cls(**steppers)
+
+        from pysph.solver.solver import Solver
+        self.solver = Solver(dim=self.dim, integrator=integrator,
+                             kernel=kernel, **kw)
+
+    def get_equations(self):
+        from fluids_wcsph import (
+            FluidSetWallVelocityUFreeSlipAndNoSlip,
+
+            FluidContinuityEquationWCSPHOnFluid,
+            FluidContinuityEquationWCSPHOnFluidSolid,
+
+            FluidEDACEquationWCSPHOnFluid,
+            FluidEDACEquationWCSPHOnFluidSolid,
+
+            StateEquation,
+            FluidSolidWallPressureBCFluidSolid,
+            FluidClampWallPressureFluidSolid,
+            FluidMomentumEquationPressureGradient,
+
+            MomentumEquationViscosity as FluidMomentumEquationViscosity,
+            MomentumEquationArtificialViscosity as
+            FluidMomentumEquationArtificialViscosity)
+
+        from solid_mech import (
+            ElasticSolidSetWallVelocityNoSlipU,
+            ElasticSolidSetWallVelocityNoSlipUhat,
+
+            ElasticSolidContinuityEquationU,
+            VelocityGradient2D,
+
+            ElasticSolidContinuityEquationUSolid,
+            VelocityGradient2DSolid,
+
+            HookesDeviatoricStressRate,
+
+            IsothermalEOS,
+
+            AdamiBoundaryConditionExtrapolateNoSlip,
+
+            ElasticSolidMonaghanArtificialViscosity,
+            AddGravityToStructure,
+            BuiFukagawaDampingGraularSPH)
+
+        from pysph.sph.solid_mech.basic import (
+            MonaghanArtificialStress,
+
+            MomentumEquationWithStress as ElasticSolidMomentumEquationWithStress,
+        )
+
+        nu_edac = self._get_edac_nu()
+        all = self.fluids + self.solids
+        stage1 = []
+
+        eqs = []
+        for fluid in self.fluids:
+            eqs.append(FluidStage1(dest=fluid,
+                                   sources=None, dt=self.dt_fluid_simulated), )
+
+        stage1.append(Group(equations=eqs, real=False))
+
+        # =========================#
+        # fluid equations
+        # =========================#
+        if len(self.solids) > 0:
+            eqs_u = []
+
+            for solid in self.solids:
+                eqs_u.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(
+                        dest=solid, sources=self.fluids))
+
+            stage1.append(Group(equations=eqs_u, real=False))
+
+        if len(self.structure_solids) > 0:
+            eqs_u = []
+
+            for solid in self.structure_solids:
+                eqs_u.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(
+                        dest=solid, sources=self.fluids))
+
+            stage1.append(Group(equations=eqs_u, real=False))
+
+        # ============================
+        # Continuity and EDAC equation
+        # ============================
+        eqs = []
+        for fluid in self.fluids:
+            eqs.append(FluidContinuityEquationWCSPHOnFluid(
+                dest=fluid,
+                sources=self.fluids))
+
+            eqs.append(FluidEDACEquationWCSPHOnFluid(
+                dest=fluid,
+                sources=self.fluids,
+                nu=nu_edac
+            ))
+
+            if len(self.solids) > 0:
+                eqs.append(FluidContinuityEquationWCSPHOnFluidSolid(
+                    dest=fluid,
+                    sources=self.solids))
+
+                eqs.append(FluidEDACEquationWCSPHOnFluidSolid(
+                    dest=fluid,
+                    sources=self.solids,
+                    nu=nu_edac
+                ))
+
+            if len(self.structures) > 0:
+                eqs.append(FluidContinuityEquationWCSPHOnStructure(
+                    dest=fluid,
+                    sources=self.structures))
+
+                eqs.append(FluidEDACEquationWCSPHOnStructure(
+                    dest=fluid,
+                    sources=self.structures,
+                    nu=nu_edac
+                ))
+
+            if len(self.structure_solids) > 0:
+                eqs.append(FluidContinuityEquationWCSPHOnStructureSolid(
+                    dest=fluid,
+                    sources=self.structure_solids))
+
+                eqs.append(FluidEDACEquationWCSPHOnStructureSolid(
+                    dest=fluid,
+                    sources=self.structure_solids,
+                    nu=nu_edac
+                ))
+
+        stage1.append(Group(equations=eqs, real=False))
+        # ============================
+        # Continuity and EDAC equation
+        # ============================
+
+        eqs = []
+        for fluid in self.fluids:
+            eqs.append(FluidStage2(dest=fluid, sources=None,
+                                   dt=self.dt_fluid_simulated))
+
+        stage1.append(Group(equations=eqs, real=False))
+
+        if len(self.solids) > 0:
+            eqs = []
+            for solid in self.solids:
+                eqs.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(dest=solid,
+                                                           sources=self.fluids))
+                eqs.append(
+                    FluidSolidWallPressureBCFluidSolid(dest=solid, sources=self.fluids,
+                                                       gx=self.gx, gy=self.gy, gz=self.gz))
+                eqs.append(
+                    FluidClampWallPressureFluidSolid(dest=solid, sources=None))
+
+            stage1.append(Group(equations=eqs, real=False))
+
+        # FSI coupling equations, set the pressure
+        if len(self.structure_solids) > 0:
+            eqs = []
+            for structure in self.structure_solids:
+                eqs.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(dest=structure,
+                                                           sources=self.fluids))
+
+                eqs.append(
+                    FluidSolidWallPressureBCStructureSolid(
+                        dest=structure, sources=self.fluids,
+                        gx=self.gx, gy=self.gy, gz=self.gz))
+                eqs.append(
+                    FluidClampWallPressureStructureSolid(
+                        dest=structure, sources=None))
+
+            stage1.append(Group(equations=eqs, real=False))
+        # FSI coupling equations, set the pressure
+
+        # FSI coupling equations, set the pressure
+        if len(self.structures) > 0:
+            eqs = []
+            for structure in self.structures:
+                eqs.append(
+                    FluidSetWallVelocityUFreeSlipAndNoSlip(
+                        dest=structure, sources=self.fluids))
+
+                eqs.append(
+                    FluidSolidWallPressureBCStructure(dest=structure,
+                                                      sources=self.fluids,
+                                                      gx=self.gx, gy=self.gy,
+                                                      gz=self.gz))
+                eqs.append(
+                    FluidClampWallPressureStructure(dest=structure, sources=None))
+
+            stage1.append(Group(equations=eqs, real=False))
+        # FSI coupling equations, set the pressure
+
+        eqs = []
+        for fluid in self.fluids:
+            if self.alpha_fluid > 0.:
+                eqs.append(
+                    FluidMomentumEquationArtificialViscosity(
+                        dest=fluid,
+                        sources=self.fluids+self.solids+self.structures
+                        + self.structure_solids,
+                        c0=self.c0_fluid,
+                        alpha=self.alpha_fluid
+                    )
+                )
+
+            if self.nu_fluid > 0.:
+                eqs.append(
+                    FluidLaminarViscosityFluid(
+                        dest=fluid, sources=self.fluids, nu=self.nu_fluid
+                    ))
+
+                eqs.append(
+                    FluidLaminarViscosityFluidSolid(
+                        dest=fluid, sources=self.solids, nu=self.nu_fluid
+                    ))
+
+                if len(self.structures) > 0:
+                    eqs.append(
+                        FluidLaminarViscosityStructure(
+                            dest=fluid, sources=self.structures,
+                            nu=self.nu_fluid))
+
+                if len(self.structure_solids) > 0:
+                    eqs.append(
+                        FluidLaminarViscosityStructureSolid(
+                            dest=fluid, sources=self.structure_solids,
+                            nu=self.nu_fluid))
+
+            eqs.append(
+                FluidMomentumEquationPressureGradient(
+                    dest=fluid, sources=self.fluids + self.solids,
+                    gx=self.gx, gy=self.gy, gz=self.gz), )
+
+            if len(self.structure_solids + self.structures) > 0.:
+                eqs.append(
+                    AccelerationOnFluidDueToStructure(
+                        dest=fluid,
+                        sources=self.structures + self.structure_solids),
+                )
+
+        stage1.append(Group(equations=eqs, real=True))
+        # ============================================
+        # fluid momentum equations ends
+        # ============================================
+
+        eqs = []
+        for fluid in self.fluids:
+            eqs.append(FluidStage3(dest=fluid, sources=None,
+                                   dt=self.dt_fluid_simulated))
+
+        stage1.append(Group(equations=eqs, real=False))
+        # =========================#
+        # fluid equations ends
+        # =========================#
+
+        # =========================#
+        # structure equations
+        # =========================#
+        stage1_stucture_eqs = []
+        all = self.structures + self.structure_solids
+        g1 = []
+
+        if len(self.structures) > 0.:
+            for structure in self.structures:
+                g1.append(SolidsStage1(dest=structure, sources=None,
+                                       dt=self.dt_solid))
+            stage1_stucture_eqs.append(Group(equations=g1))
+
+        if self.solid_velocity_bc is True:
+            tmp = []
+            if len(self.structure_solids) > 0:
+                for boundary in self.structure_solids:
+                    tmp.append(
+                        ElasticSolidSetWallVelocityNoSlipU(
+                            dest=boundary, sources=self.structures))
+                stage1_stucture_eqs.append(Group(equations=tmp))
+
+            tmp = []
+            if len(self.structure_solids) > 0:
+                for boundary in self.structure_solids:
+                    tmp.append(
+                        ElasticSolidSetWallVelocityNoSlipUhat(
+                            dest=boundary, sources=self.structures))
+                stage1_stucture_eqs.append(Group(equations=tmp))
+
+        g1 = []
+        if len(self.structures) > 0.:
+            for structure in self.structures:
+                g1.append(ElasticSolidContinuityEquationU(
+                    dest=structure, sources=self.structures))
+                g1.append(
+                    VelocityGradient2D(
+                        dest=structure, sources=self.structures))
+
+                if len(self.structure_solids) > 0:
+                    g1.append(
+                        ElasticSolidContinuityEquationUSolid(dest=structure,
+                                                             sources=self.structure_solids))
+
+                    g1.append(
+                        VelocityGradient2DSolid(dest=structure, sources=self.structure_solids))
+
+            stage1_stucture_eqs.append(Group(equations=g1))
+
+            g2 = []
+            for structure in self.structures:
+                g2.append(
+                    MonaghanArtificialStress(dest=structure, sources=None,
+                                             eps=self.artificial_stress_eps))
+
+                g2.append(HookesDeviatoricStressRate(dest=structure,
+                                                     sources=None))
+
+            stage1_stucture_eqs.append(Group(equations=g2))
+
+        g1 = []
+        if len(self.structures) > 0.:
+            for structure in self.structures:
+                g1.append(SolidsStage2(dest=structure, sources=None,
+                                       dt=self.dt_solid))
+            stage1_stucture_eqs.append(Group(equations=g1))
+        # =========================#
+        # structure equations ends
+        # =========================#
+
+        # ============================================
+        # structures momentum equations
+        # ============================================
+        g1 = []
+        g2 = []
+        g3 = []
+        g4 = []
+
+        # if self.edac is False:
+        if len(self.structures) > 0.:
+            for structure in self.structures:
+                g2.append(IsothermalEOS(structure, sources=None))
+            stage1_stucture_eqs.append(Group(g2))
+
+        # -------------------
+        # boundary conditions
+        # -------------------
+        if len(self.structure_solids) > 0:
+            for boundary in self.structure_solids:
+                g3.append(
+                    AdamiBoundaryConditionExtrapolateNoSlip(
+                        dest=boundary, sources=self.structures, gx=self.gx,
+                        gy=self.gy, gz=self.gz))
+            stage1_stucture_eqs.append(Group(g3))
+
+        # -------------------
+        # solve momentum equation for solid
+        # -------------------
+        if len(self.structures) > 0.:
+            g4 = []
+            for structure in self.structures:
+                # add only if there is some positive value
+                if self.alpha_solid > 0. or self.beta_solid > 0.:
+                    g4.append(
+                        ElasticSolidMonaghanArtificialViscosity(
+                            dest=structure,
+                            sources=self.structures + self.structure_solids,
+                            alpha=self.alpha_solid,
+                            beta=self.beta_solid))
+
+                g4.append(
+                    ElasticSolidMomentumEquationWithStress(
+                        dest=structure,
+                        sources=self.structures + self.structure_solids))
 
                 g4.append(
                     AccelerationOnStructureDueToFluid(dest=structure,

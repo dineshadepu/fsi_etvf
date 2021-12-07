@@ -21,7 +21,8 @@ from pysph.examples.solid_mech.impact import add_properties
 from pysph.tools.geometry import get_2d_block, rotate
 
 # from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
-from fsi_wcsph import FSIWCSPHScheme
+from fsi_wcsph import (FSIWCSPHScheme, FSIWCSPHFluidsScheme,
+                       FSIWCSPHFluidsScheme, FSIWCSPHFluidsSubSteppingScheme)
 
 from boundary_particles import (add_boundary_identification_properties,
                                 get_boundary_identification_etvf_equations)
@@ -420,19 +421,32 @@ class ElasticGate(Application):
         #                                    mach_no_structure=0.)
 
         wcsph = FSIWCSPHScheme(fluids=['fluid'],
-                                         solids=['tank'],
-                                         structures=['gate'],
-                                         structure_solids=['gate_support'],
-                                         dim=2,
-                                         h_fluid=0.,
-                                         c0_fluid=0.,
-                                         nu_fluid=0.,
-                                         rho0_fluid=0.,
-                                         mach_no_fluid=0.,
-                                         mach_no_structure=0.)
+                               solids=['tank'],
+                               structures=['gate'],
+                               structure_solids=['gate_support'],
+                               dim=2,
+                               h_fluid=0.,
+                               c0_fluid=0.,
+                               nu_fluid=0.,
+                               rho0_fluid=0.,
+                               mach_no_fluid=0.,
+                               mach_no_structure=0.)
+
+        wcsph_fluids = FSIWCSPHFluidsScheme(fluids=['fluid'],
+                                            solids=['tank'],
+                                            structures=['gate'],
+                                            structure_solids=['gate_support'],
+                                            dim=2,
+                                            h_fluid=0.,
+                                            c0_fluid=0.,
+                                            nu_fluid=0.,
+                                            rho0_fluid=0.,
+                                            mach_no_fluid=0.,
+                                            mach_no_structure=0.)
 
         # s = SchemeChooser(default='wcsph', substep=substep, wcsph=wcsph)
-        s = SchemeChooser(default='wcsph', wcsph=wcsph)
+        s = SchemeChooser(default='wcsph', wcsph=wcsph,
+                          wcsph_fluids=wcsph_fluids)
 
         return s
 
