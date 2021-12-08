@@ -603,6 +603,7 @@ class FSIWCSPHFluidsScheme(Scheme):
         self.damping = False
         self.damping_coeff = 0.002
         self.solid_velocity_bc = True
+        self.fsi_type = None
 
         # common properties
         self.solver = None
@@ -645,6 +646,12 @@ class FSIWCSPHFluidsScheme(Scheme):
         group.add_argument("--damping-coeff", action="store",
                            dest="damping_coeff", default=0.000, type=float,
                            help="Damping coefficient for Bui")
+
+        # choices = ['']
+        # group.add_argument(
+        #     "--pst", action="store", dest='pst', default="sun2019",
+        #     choices=choices,
+        #     help="Specify what PST to use (one of %s)." % choices)
 
     def consume_user_options(self, options):
         vars = ['alpha_fluid', 'alpha_solid', 'beta_solid',
@@ -900,8 +907,8 @@ class FSIWCSPHFluidsScheme(Scheme):
                                                       sources=self.fluids,
                                                       gx=self.gx, gy=self.gy,
                                                       gz=self.gz))
-                eqs.append(
-                    FluidClampWallPressureStructure(dest=structure, sources=None))
+                # eqs.append(
+                #     FluidClampWallPressureStructure(dest=structure, sources=None))
 
             stage2.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure
@@ -1523,8 +1530,8 @@ class FSIWCSPHFluidsSubSteppingScheme(FSIWCSPHFluidsScheme):
                                                       sources=self.fluids,
                                                       gx=self.gx, gy=self.gy,
                                                       gz=self.gz))
-                eqs.append(
-                    FluidClampWallPressureStructure(dest=structure, sources=None))
+                # eqs.append(
+                #     FluidClampWallPressureStructure(dest=structure, sources=None))
 
             stage1.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure
@@ -1772,168 +1779,7 @@ class FSIWCSPHFluidsSubSteppingScheme(FSIWCSPHFluidsScheme):
         return stage1
 
 
-class FSIWCSPHScheme(Scheme):
-    def __init__(self, fluids, structures, solids, structure_solids, dim,
-                 h_fluid, c0_fluid, nu_fluid, rho0_fluid, mach_no_fluid,
-                 mach_no_structure, dt_fluid=1., dt_solid=1., pb_fluid=0.0,
-                 gx=0.0, gy=0.0, gz=0.0, alpha_solid=1.0,
-                 beta_solid=0.0, alpha_fluid=0.0, edac_alpha=0.5,
-                 pst="sun2019", edac=False):
-        """Parameters
-        ----------
-
-        fluids: list
-            List of names of fluid particle arrays.
-        solids: list
-            List of names of solid particle arrays (or boundaries).
-        stuctures: list
-            List of names of solid particle arrays (or boundaries).
-        structure_solids: list
-            List of names of solid particle arrays (or boundaries).
-        dim: int
-            Dimensionality of the problem.
-        h_fluid: float
-            Reference smoothing length of fluid medium.
-        c0_fluid: float
-            Reference speed of sound of fluid medium.
-        nu_fluid: float
-            Real viscosity of the fluid, defaults to no viscosity.
-        rho_fluid: float
-            Reference density of fluid medium.
-        gx, gy, gz: float
-            Body force acceleration components.
-        alpha_solid: float
-            Coefficient for artificial viscosity for solid.
-        beta_solid: float
-            Coefficient for artificial viscosity for solid.
-        edac: bool
-            Use edac equation for fluid
-        damping: bool
-            Use damping for the elastic structure part
-        damping_coeff: float
-            The damping coefficient for the elastic structure
-        """
-        self.fluids = fluids
-        self.solids = solids
-        self.structures = structures
-        if structure_solids is None:
-            self.structure_solids = []
-        else:
-            self.structure_solids = structure_solids
-        self.dim = dim
-        self.h_fluid = h_fluid
-        self.c0_fluid = c0_fluid
-        self.nu_fluid = nu_fluid
-        self.rho0_fluid = rho0_fluid
-        self.mach_no_fluid = mach_no_fluid
-        self.mach_no_structure = mach_no_structure
-        self.artificial_stress_eps = 0.3
-        self.dt_fluid = dt_fluid
-        self.dt_solid = dt_solid
-        self.pb_fluid = pb_fluid
-        self.gx = gx
-        self.gy = gy
-        self.gz = gz
-        self.alpha_solid = alpha_solid
-        self.beta_solid = beta_solid
-        self.alpha_fluid = alpha_fluid
-        self.edac_alpha = edac_alpha
-        self.edac = edac
-        self.wall_pst = True
-        self.damping = False
-        self.damping_coeff = 0.002
-        self.solid_velocity_bc = True
-
-        # common properties
-        self.solver = None
-        self.kernel_factor = 2
-
-        self.attributes_changed()
-
-    def add_user_options(self, group):
-        group.add_argument("--alpha-fluid", action="store", type=float,
-                           dest="alpha_fluid",
-                           default=0.1,
-                           help="Alpha for the artificial viscosity in fluid.")
-
-        group.add_argument("--alpha-solid", action="store", type=float,
-                           dest="alpha_solid",
-                           default=1,
-                           help="Alpha for the artificial viscosity in solid.")
-
-        group.add_argument("--beta-solid", action="store", type=float,
-                           dest="beta_solid",
-                           default=0.0,
-                           help="Beta for the artificial viscosity in solid.")
-
-        group.add_argument("--edac-alpha", action="store", type=float,
-                           dest="edac_alpha", default=None,
-                           help="Alpha for the EDAC scheme viscosity.")
-
-        add_bool_argument(group, 'solid-velocity-bc', dest='solid_velocity_bc',
-                          default=True,
-                          help='Apply velocity bc to solids in Elastic dynamics')
-
-        add_bool_argument(group, 'wall-pst', dest='wall_pst',
-                          default=True, help='Add wall as PST source')
-
-        add_bool_argument(group, 'damping',
-                          dest='damping',
-                          default=False,
-                          help='Use damping')
-
-        group.add_argument("--damping-coeff", action="store",
-                           dest="damping_coeff", default=0.000, type=float,
-                           help="Damping coefficient for Bui")
-
-    def consume_user_options(self, options):
-        vars = ['alpha_fluid', 'alpha_solid', 'beta_solid',
-                'edac_alpha', 'wall_pst', 'damping', 'damping_coeff']
-        data = dict((var, self._smart_getattr(options, var)) for var in vars)
-        self.configure(**data)
-
-    def attributes_changed(self):
-        if self.pb_fluid is not None:
-            self.use_tvf = abs(self.pb_fluid) > 1e-14
-        if self.h_fluid is not None and self.c0_fluid is not None:
-            self.art_nu = self.edac_alpha * self.h_fluid * self.c0_fluid / 8
-
-    def configure_solver(self, kernel=None, integrator_cls=None,
-                         extra_steppers=None, **kw):
-        from pysph.base.kernels import QuinticSpline
-        from pysph.sph.wc.gtvf import GTVFIntegrator
-        from solid_mech import (GTVFSolidMechStepEDAC, SolidMechStep)
-        kernel = QuinticSpline(dim=self.dim)
-        steppers = {}
-        if extra_steppers is not None:
-            steppers.update(extra_steppers)
-
-        # fluid stepper
-        step_cls = EDACGTVFStep
-        cls = (integrator_cls
-               if integrator_cls is not None else GTVFIntegrator)
-
-        for fluid in self.fluids:
-            if fluid not in steppers:
-                steppers[fluid] = step_cls()
-        integrator = cls(**steppers)
-
-        # structure stepper
-        if self.edac is True:
-            step_cls = GTVFSolidMechStepEDAC
-        else:
-            step_cls = SolidMechStep
-
-        for name in self.structures:
-            if name not in steppers:
-                steppers[name] = step_cls()
-
-        integrator = cls(**steppers)
-
-        from pysph.solver.solver import Solver
-        self.solver = Solver(dim=self.dim, integrator=integrator,
-                             kernel=kernel, **kw)
-
+class FSIWCSPHScheme(FSIWCSPHFluidsScheme):
     def get_equations(self):
         # from pysph.sph.wc.gtvf import (MomentumEquationArtificialStress)
         from fluids_wcsph import (
@@ -2138,8 +1984,8 @@ class FSIWCSPHScheme(Scheme):
                                                       sources=self.fluids,
                                                       gx=self.gx, gy=self.gy,
                                                       gz=self.gz))
-                eqs.append(
-                    FluidClampWallPressureStructure(dest=structure, sources=None))
+                # eqs.append(
+                #     FluidClampWallPressureStructure(dest=structure, sources=None))
 
             stage2.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure
@@ -2516,48 +2362,12 @@ class FSIWCSPHScheme(Scheme):
         return nu
 
 
-class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
+class FSIWCSPHSubSteppingScheme(FSIWCSPHFluidsScheme):
     def attributes_changed(self):
         super().attributes_changed()
 
         self.dt_factor = int(self.dt_fluid / self.dt_solid) + 1
         self.dt_fluid_simulated = self.dt_factor * self.dt_solid
-
-    def configure_solver(self, kernel=None, integrator_cls=None,
-                         extra_steppers=None, **kw):
-        from pysph.base.kernels import QuinticSpline
-        from pysph.sph.wc.gtvf import GTVFIntegrator
-        from solid_mech import (GTVFSolidMechStepEDAC, SolidMechStep)
-        kernel = QuinticSpline(dim=self.dim)
-        steppers = {}
-        if extra_steppers is not None:
-            steppers.update(extra_steppers)
-
-        # fluid stepper
-        step_cls = EDACGTVFStep
-        cls = (integrator_cls
-               if integrator_cls is not None else SubSteppingIntegrator)
-
-        for fluid in self.fluids:
-            if fluid not in steppers:
-                steppers[fluid] = step_cls()
-        integrator = cls(**steppers)
-
-        # structure stepper
-        if self.edac is True:
-            step_cls = GTVFSolidMechStepEDAC
-        else:
-            step_cls = SolidMechStep
-
-        for name in self.structures:
-            if name not in steppers:
-                steppers[name] = step_cls()
-
-        integrator = cls(**steppers)
-
-        from pysph.solver.solver import Solver
-        self.solver = Solver(dim=self.dim, integrator=integrator,
-                             kernel=kernel, **kw)
 
     def get_equations(self):
         from fluids_wcsph import (
@@ -2744,8 +2554,8 @@ class FSIWCSPHSubSteppingScheme(FSIWCSPHScheme):
                                                       sources=self.fluids,
                                                       gx=self.gx, gy=self.gy,
                                                       gz=self.gz))
-                eqs.append(
-                    FluidClampWallPressureStructure(dest=structure, sources=None))
+                # eqs.append(
+                #     FluidClampWallPressureStructure(dest=structure, sources=None))
 
             stage1.append(Group(equations=eqs, real=False))
         # FSI coupling equations, set the pressure

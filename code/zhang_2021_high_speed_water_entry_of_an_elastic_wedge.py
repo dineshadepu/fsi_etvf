@@ -357,7 +357,7 @@ class WaterEntryOfElasticWedge(Application):
 
         wcsph = FSIWCSPHScheme(fluids=['fluid'],
                                solids=['tank'],
-                               structures=['gate'],
+                               structures=['wedge'],
                                structure_solids=None,
                                dim=2,
                                h_fluid=0.,
@@ -369,7 +369,7 @@ class WaterEntryOfElasticWedge(Application):
 
         wcsph_fluids = FSIWCSPHFluidsScheme(fluids=['fluid'],
                                             solids=['tank'],
-                                            structures=['gate'],
+                                            structures=['wedge'],
                                             structure_solids=None,
                                             dim=2,
                                             h_fluid=0.,

@@ -19,6 +19,7 @@ from pysph.examples.solid_mech.impact import add_properties
 #                                                                create_fluid,
 #                                                                create_sphere)
 from pysph.tools.geometry import get_2d_block, rotate
+from pysph.tools.geometry import (remove_overlap_particles)
 
 # from fsi_coupling import FSIETVFScheme, FSIETVFSubSteppingScheme
 from fsi_wcsph import (FSIWCSPHScheme, FSIWCSPHFluidsScheme,
@@ -42,87 +43,51 @@ def find_displacement_index(pa):
     pa.tip_displacemet_index[index] = 1
 
 
-def get_fixed_beam(beam_length, beam_height, beam_inside_length,
-                   boundary_layers, spacing):
-    """
- |||=============
- |||=============
- |||===================================================================|
- |||===================================================================|Beam height
- |||===================================================================|
- |||=============
- |||=============
-   <------------><---------------------------------------------------->
-      Beam inside                   Beam length
-      length
-    """
-    import matplotlib.pyplot as plt
+def get_clamped_beam(beam_length, beam_height, beam_inside_height,
+                     boundary_layers, spacing):
     # create a block first
-    xb, yb = get_2d_block(dx=spacing, length=beam_length + beam_inside_length,
-                          height=beam_height)
+    xb, yb = get_2d_block(dx=spacing, length=beam_length,
+                          height=beam_height + beam_inside_height)
 
     # create a (support) block with required number of layers
-    xs1, ys1 = get_2d_block(dx=spacing, length=beam_inside_length,
-                            height=boundary_layers * spacing)
-    xs1 += np.min(xb) - np.min(xs1)
-    ys1 += np.min(yb) - np.max(ys1) - spacing
+    xs1, ys1 = get_2d_block(dx=spacing, length=boundary_layers * spacing,
+                            height=beam_inside_height)
+    xs1 -= np.max(xs1) - np.min(xb) + spacing
+    ys1 += np.max(yb) - np.max(ys1)
 
     # create a (support) block with required number of layers
-    xs2, ys2 = get_2d_block(dx=spacing, length=beam_inside_length,
-                            height=boundary_layers * spacing)
-    xs2 += np.min(xb) - np.min(xs2)
-    ys2 += np.max(ys2) - np.min(yb) + spacing
+    xs2, ys2 = get_2d_block(dx=spacing, length=boundary_layers * spacing,
+                            height=beam_inside_height)
+    xs2 += np.max(xb) - np.min(xs2) + spacing
+    ys2 += np.max(yb) - np.max(ys2)
 
     xs = np.concatenate([xs1, xs2])
     ys = np.concatenate([ys1, ys2])
 
-    xs3, ys3 = get_2d_block(dx=spacing, length=boundary_layers * spacing,
-                            height=np.max(ys) - np.min(ys))
-    xs3 += np.min(xb) - np.max(xs3) - 1. * spacing
-    # ys3 += np.max(ys2) - np.min(yb) + spacing
+    xs3, ys3 = get_2d_block(dx=spacing, length=np.max(xs) - np.min(xs),
+                            height=beam_height)
+    # xs3 += np.min(xb) - np.max(xs3) - 1. * spacing
+    ys3 += np.max(yb) - np.min(ys3) + spacing
 
     xs = np.concatenate([xs, xs3])
     ys = np.concatenate([ys, ys3])
-    # plt.scatter(xs, ys, s=1)
-    # plt.scatter(xb, yb, s=1)
-    # plt.axes().set_aspect('equal', 'datalim')
-    # plt.savefig("geometry", dpi=300)
-    # plt.show()
 
     return xb, yb, xs, ys
 
 
-def get_fixed_beam_without_clamp(beam_length, beam_height, boundary_height, spacing):
-    """
- |||=============
- |||=============
- |||===================================================================|
- |||===================================================================|Beam height
- |||===================================================================|
- |||=============
- |||=============
-   <------------><---------------------------------------------------->
-      Beam inside                   Beam length
-      length
-    """
-    import matplotlib.pyplot as plt
+def get_beam(beam_length, beam_height, boundary_height, spacing):
     # create a block first
-    xb, yb = get_2d_block(dx=spacing, length=beam_length,
+    xb, yb = get_2d_block(dx=spacing, length=beam_length + spacing/2.,
                           height=beam_height)
 
     # create a (support) block with required number of layers
-    xs1, ys1 = get_2d_block(dx=spacing, length=beam_length,
-                            height=boundary_height)
+    xs1, ys1 = get_2d_block(dx=spacing, length=beam_length + spacing/2.,
+                            height=boundary_height + 2. * boundary_height)
 
-    ys1 += np.min(yb) - np.max(ys1) - spacing
+    ys1 += np.max(yb) - np.min(ys1) + spacing
 
     xs = np.concatenate([xs1])
     ys = np.concatenate([ys1])
-    # plt.scatter(xs, ys, s=1)
-    # plt.scatter(xb, yb, s=1)
-    # plt.axes().set_aspect('equal', 'datalim')
-    # plt.savefig("geometry", dpi=300)
-    # plt.show()
 
     return xb, yb, xs, ys
 
@@ -220,7 +185,7 @@ class ElasticGate(Application):
         self.gate_nu = 0.4
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
-        self.u_max_gate = 50
+        self.u_max_gate = 3.
         self.mach_no_gate = self.u_max_gate / self.c0_gate
         self.boundary_equations_2 = get_boundary_identification_etvf_equations(
             destinations=["gate"], sources=["gate", "gate_support"],
@@ -279,25 +244,31 @@ class ElasticGate(Application):
         # =============================================
         # Only structures part particle properties
         # =============================================
-        with_out_clamp = True
-        if with_out_clamp is True:
-            xp, yp, xw, yw = get_fixed_beam_without_clamp(self.H, self.L,
-                                                          self.L, self.fluid_spacing)
+        clamp_wall = True
+        if clamp_wall is True:
+            xp, yp, xw, yw = get_clamped_beam(self.L, self.H,
+                                              self.H/2.5,
+                                              4.,
+                                              self.fluid_spacing)
+
+            x_scale = max(xp) - max(fluid.x) + self.fluid_spacing
+            xp += x_scale
+            xw += x_scale
+
+            y_scale = min(yp) - min(fluid.y)
+            yp -= y_scale
+            yw -= y_scale
 
         else:
-            xp, yp, xw, yw = get_fixed_beam(self.H, self.L, self.H/2.5,
-                                            self.wall_layers, self.fluid_spacing)
+            xp, yp, xw, yw = get_beam(self.L, self.H, self.H/2.5,
+                                      self.fluid_spacing)
+            x_scale = max(xp) - max(fluid.x) + self.fluid_spacing
+            xp += x_scale
+            xw += x_scale
 
-        # make sure that the beam intersection with wall starts at the 0.
-        # min_xp = np.min(xp)
-
-        # # add this to the beam and wall
-        # xp += abs(min_xp)
-        # xw += abs(min_xp)
-
-        # max_xw = np.max(xw)
-        # xp -= abs(max_xw)
-        # xw -= abs(max_xw)
+            y_scale = min(yp) - min(fluid.y)
+            yp -= y_scale
+            yw -= y_scale
 
         m = self.gate_rho0 * self.fluid_spacing**2.
 
@@ -326,49 +297,12 @@ class ElasticGate(Application):
                 'n': 4.,
                 'spacing0': self.gate_spacing,
             })
-        # ================================
-        # Adjust the geometry
-        # ================================
-        # rotate the particles
-        axis = np.array([0.0, 0.0, 1.0])
-        angle = -90
-        xp, yp, zp = rotate(gate.x, gate.y, gate.z, axis, angle)
-        gate.x, gate.y, gate.z = xp[:], yp[:], zp[:]
 
-        xw, yw, zw = rotate(gate_support.x, gate_support.y,
-                            gate_support.z, axis, angle)
-        gate_support.x, gate_support.y, gate_support.z = xw[:], yw[:], zw[:]
-
-        # translate gate and gate support
-        x_translate = (max(fluid.x) - min(gate_support.x)) - self.fluid_spacing * 2.
-        gate.x += x_translate
-        gate_support.x += x_translate
-
-        y_translate = (max(tank.y) - max(gate_support.y)) + 3. * self.fluid_spacing
-        gate.y += y_translate
-        gate_support.y += y_translate
-
-        if with_out_clamp is True:
-            # set the gate and gate support x variables
-            # translate gate and gate support
-            x_translate = (max(fluid.x) - min(gate.x)) + self.fluid_spacing
-            gate.x += x_translate
-
-            x_translate = (max(fluid.x) - min(gate_support.x)) + self.fluid_spacing
-            gate_support.x += x_translate
-
-            y_translate = (min(tank.y) - min(gate.y)) + 3. * self.fluid_spacing
-            gate.y += y_translate
-
-            y_translate = (max(gate.y) - min(gate_support.y))
-            gate_support.y += y_translate + self.fluid_spacing
-
-        # gate.x[:] += 3. * self.fluid_spacing
-        # gate_support.x[:] += 3. * self.fluid_spacing
-
-        # ================================
-        # Adjust the geometry ends
-        # ================================
+        # remove the particles
+        remove_overlap_particles(fluid, gate_support, self.fluid_spacing/2.)
+        gate_support.y[:] += self.fluid_spacing/4.
+        remove_overlap_particles(fluid, gate_support, self.fluid_spacing/2.)
+        gate_support.y[:] -= self.fluid_spacing/4.
 
         self.scheme.setup_properties([fluid, tank,
                                       gate, gate_support])
