@@ -65,116 +65,132 @@
 \section{Introduction}
 \label{sec:intro}
 
-Some FSI introduction. Its importance in different fields. Its applications so
-far.
-
-
-In modelling FSI problems, there are mainly two ways to handle the fluid and
-structures modelling. One way is to model the fluid part with mesh based
-scheme and solids part also with mesh based scheme. Like how (cite many papers
-which have done this). Or fluid part is modelled with a particle based scheme
-and the structures part with a mesh based scheme (Cite articles which have
-done this). One more way is to model both the phases using particle based
-schemes. In this paper we use particle based method to model both the phases.
-
-
-Recently there has been very good work on modelling fsi with particle based
-methods. Specific to particle based modelling, the fluid is modelled with SPH,
-and structure is modelled with different numerical method. Few articles which
-have done in this regard are as follows, citet{hosseini2009particle} has
-modelled the structure part using EBG method, then \citet{wu2016coupled}
-modelled it with DEM, \citet{ng2020coupled} modeled it using volume
-compensated particle method (VCPM), \citet{peng2021coupling} modeled it with
-RKPM, citet{zhang2021deltasph} modeled it with Smoothed Point Interpolation
-Method (SPIM).
-
-
-Recently there have been heavy improvements to basic SPH methodology in
-modelling fluid problems. Schemes such as $\delta$ SPH, $\delta +$ SPH, TVF
-for internal flows and GTVF for external flows is been proposed. Also, many
-new strategies were proposed to in overcoming the particle homogeneity
-problem, such as IPST, which is applied in \cite{IPST paper}. Also these
-improvements take care of tensile instability problem too. Another variant of
-SPH is ISPH, todoin{please cite some ISPH papers here}.
-
-
-Using only SPH, articles have been proposed where we model both the phases
-only using SPH. To note some, \citet{He2017coupled} has modelled the fluid
-part with WCSPH, \citet{Sun2019study} with delta sph,
-\citet{zhan2019stabilized} with WCSPH but applied to 3d problems with GPU. All
-these schemes use TLSPH as to model the structure part. And papers by Abbas use
-usual Gray equations to model the structures part.
-
-\citet{sun2019fully} couples MPS and BPM model to simulate FSI. He models both
-elastic dam break and flow over an elastic obstacle.
-
-
-
-Recently {cite our paper ETVF} has been proposed as an another extension to
-TVF to model both fluid and structures part. In the current work we couple
-purely Eulerian SPH based schemes to model the FSI problems. We take advantage
-of the accuracy of the ETVF scheme proposed in modelling the fluids. ETVF
-scheme deals with tensile instability in both fluid and solid inherently.
-
+Xu has introduced the particle shifting and adjusted the particles and applied
+it to fluid problems. TVF is a new variant which unifies the formulation and
+applied it to fluid problems. This TVF has been generalized and applied to free
+surface problems as well as elastic solid problems.
 
 
 
 \section{Governing equations}
 
+continuity equation
+\begin{equation}
+  \label{eq:ce}
+  \frac{d \rho}{d t} = - \rho \; \frac{\partial u_i}{\partial x_i},
+\end{equation}
+and by the momentum equation
+\begin{equation}
+  \label{eq:me}
+  \frac{d u_i}{d t} = \frac{1}{\rho} \; \frac{\partial \sigma_{ij}}{\partial x_j}
+  + g_i,
+\end{equation}
+with $\frac{{d} }{d t}$, $\rho$, $t$, $u_i$, $x_i$, $\sigma_{ij}$ and $g_{i}$
+denoting material derivative, density, time, velocity vector, position vector,
+stress tensor and gravity, respectively.
 
-\subsection{Fluid governing equations}
 
+The stress tensor is split into isotropic and deviatoric parts,
+\begin{equation}
+  \label{eq:stress_tensor_decomposition}
+  \sigma_{ij} = - p \; \delta_{ij} + \sigma'_{ij},
+\end{equation}
+where $p$ and $\delta_{ij}$ denote pressure and Kronecker delta function, while
+$\sigma'_{ij}$ is the deviatoric stress.
 
+The rate of change of deviatoric stress $\frac{d \sigma'_{ij}}{dt}$ can be
+computed from the strain rate $\dot{\epsilon}_{ij}$ and rotation tensor
+$\dot{\Omega}_{ij}$ according to Jaumann's formulation for Hooke's stress law
+as
+\begin{equation}
+  \label{eq:jaumann-stress-rate}
+  \frac{d \sigma'_{ij}}{dt} = 2G (\dot{\epsilon}_{ij} - \frac{1}{3}
+  \dot{\epsilon}_{kk} \delta_{ij}) + \sigma^{'}_{ik}  \Omega_{jk} +
+  \Omega_{ik} \sigma^{'}_{kj}.
+\end{equation}
+Here $G$ is the shear modulus, while $\dot{\epsilon}_{ij}$ is
+\begin{equation}
+  \label{eq:strain-tensor}
+  \dot{\epsilon}_{ij} = \frac{1}{2} \bigg(\frac{\partial u_i}{\partial x_j} +
+  \frac{\partial u_j}{\partial x_i} \bigg),
+\end{equation}
+and $\Omega_{ij}$ is
+\begin{equation}
+  \label{eq:rotational-tensor}
+  \Omega_{ij} = \frac{1}{2} \bigg(\frac{\partial u_i}{\partial x_j} -
+  \frac{\partial u_j}{\partial x_i} \bigg).
+\end{equation}
 
-\subsection{Elastic solid governing equations}
+For a weakly-compressible or incompressible fluid the deviatoric stress
+vanishes and a viscous force is added to the stress tensor:
+\begin{equation}
+  \label{eq:fluid-stress-decomposition}
+  \sigma_{ij} = - p \delta_{ij} + 2 \eta \frac{\partial u_i}{\partial x_j}
+\end{equation}
+where $\eta$ is the kinematic viscosity of the fluid.
 
-
+In both fluid and solid modelling the pressure is computed using an
+isothermal equation of state, given as,
+\begin{equation}
+  \label{eq:pressure-equation}
+  p = K \bigg(\frac{\rho}{\rho_{0}} - 1 \bigg),
+\end{equation}
+where $K = \rho_{0} c_0^2$ is the bulk modulus. Here, the constants $c_0$ and
+$\rho_0$ are the reference speed of sound and density, respectively. For solids,
+$c_0$ is computed as $\sqrt{\frac{E}{3 (1 - 2 \nu)\rho_{0}}}$, $\nu$ is the
+Poisson ratio.
 
 
 \section{Numerical method}
 
 Write about Material derivative
 
+\begin{equation}
+  \label{eq:modified-material-derivative}
+  \frac{\tilde{d} }{d t} = \frac{\partial }{\partial t} +
+  \tilde{u}_j \frac{\partial }{\partial x_j}.
+\end{equation}
 
-\subsection{Modified equation for fluids}
+\begin{equation}
+  \label{eq:ce-tvf}
+  \frac{\tilde{d} \rho}{d t} =
+  - \rho \frac{\partial \tilde{u}_j}{\partial x_j} +
+  \frac{\partial (\rho (\tilde{u}_j - u_j))}{\partial x_j}.
+\end{equation}
 
-
-\subsection{Modified equation for solids}
-
-
-
-\section{SPH discretization of the equations}
-
-
-
-\subsection{Discretized fluid equations}
-
-
-\subsection{Discretized solid equations}
-
-
-\subsection{Transport velocity computation of the mediums}
-
-
-\section{Fluid structure interaction}
-
-
-\section{Summary equations of the full model to be solved}
+\begin{equation}
+  \label{eq:mom-tvf}
+  \frac{\tilde{d} u_i}{d t} =
+  \frac{\partial}{\partial x_j} (u_i (\tilde{u}_j - u_j))
+  - u_i \frac{\partial}{\partial x_j} (\tilde{u}_j - u_j)
+  + g_i
+  +\frac{1}{\rho} \frac{\partial \sigma_{ij}}{\partial x_j}.
+\end{equation}
 
 
+\begin{equation}
+  \label{eq:edac-p-evolve}
+  \frac{\tilde{d} p}{d t} =
+  (p -\rho c_s^2)
+    \text{div}(\ten{u})
+  - p \; \text{div}(\tilde{\ten{u}})
+    + \text{div}(p (\tilde{\ten{u}} - \ten{u}))
+    + \nu_{edac}  \nabla^2 p.
+\end{equation}
+%
+The value of $\nu_{edac}$ is,
+\begin{equation}
+  \label{eq:nu-edac}
+  \nu_{edac} = \frac{\alpha_{\textrm{edac}} h c_s}{8},
+\end{equation}
 
 
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+\subsection{SPH discretization}
 
-
-\subsection{Solid mechanics equations}
-
-The discretized equations of the fluid medium are
-
+In the current work, both fluid and solid modelling uses the same continuity
+and pressure evolution equation. The SPH discretization of the continuity
+equation~\eqref{eq:ce-tvf} and the pressure evolution
+equation~\eqref{eq:edac-p-evolve} respectively are,
 \begin{equation}
   \label{eq:sph-discretization-continuity}
   \frac{\tilde{d}\rho_a}{dt} = \sum_{b} \; \frac{m_b}{\rho_{b}} \; (
@@ -183,16 +199,34 @@ The discretized equations of the fluid medium are
   \ten{u}))_{ab}) \; \cdot \nabla_{a} W_{ab},
 \end{equation}
 
-\begin{equation}
-  \label{eq:sph-momentum-solid}
+\begin{multline}
+  \label{eq:sph-discretization-edac}
+  \frac{\tilde{d}p_a}{dt} = \sum_{b} \; \frac{m_b}{\rho_{b}} \; \bigg(
+  (p_{a} - \rho_{a} c_{s}^2) \; \ten{u}_{ab} \; + \;
+  p_{a} \; \tilde{\ten{u}}_{ab} \; - \;
+  (p \; (\tilde{\ten{u}} - \ten{u}))_{ab} \; + \; \\
+  4 \; \nu_{edac}
+  \frac{p_a - p_b}{(\rho_a + \rho_b) (r^2_{ab} + 0.01 h_{ab}^{2})} \ten{r}_{ab}
+  \bigg) \; \cdot \nabla_{a} W_{ab}.
+\end{multline}
+%
+Similarly, the discretized momentum equation for fluids is written as,
+\begin{multline}
+  \label{eq:sph-momentum-fluid}
   \frac{\tilde{d}\ten{u}_{a}}{dt} = - \sum_{b} m_b \bigg[
   \bigg(\frac{p_a}{\rho_a^2} + \frac{p_b}{\rho_b^2}\bigg) \ten{I} -
-  \bigg(\frac{\teng{\sigma}^{'}_{a}}{\rho_a^2} +
-  \frac{\teng{\sigma}^{'}_{b}}{\rho_b^2} + \Pi_{ab} \ten{I} \bigg) \bigg]  \cdot \nabla_{a} W_{ab} +
+  \bigg(\frac{\ten{A}_a}{\rho_a^2} + \frac{\ten{A}_b}{\rho_b^2} + \Pi_{ab}
+  \ten{I} \bigg) \bigg]
+  \cdot \nabla_{a} W_{ab} \\
+  + \ten{u}_{a} \sum_{b} \frac{m_b}{\rho_{b}} \; \tilde{\ten{u}}_{ab} \cdot
+  \nabla_{a} W_{ab} + \sum_{b} m_b \frac{4 \eta \nabla W_{ab}\cdot
+    \ten{r}_{ab}}{(\rho_a + \rho_b) (r_{ab}^2 + 0.01 h_{ab}^2)} \ten{u}_{ab} +
   \ten{g}_{a},
-\end{equation}
-
-$\Pi_{ab}$ is the artificial
+\end{multline}
+where $\ten{A}_a = \rho_a \ten{u}_a \otimes (\ten{\tilde{u}}_a - \ten{u}_a)$,
+$\ten{I}$ is the identity matrix, $\eta$ is the kinematic viscosity of the
+fluid and \citet{morris1997modeling} formulation is used to discretize the
+viscosity term. $\Pi_{ab}$ is the artificial
 viscosity~\cite{monaghan-review:2005} to maintain the stability of the
 numerical scheme. It is given as,
 \begin{align}
@@ -216,48 +250,130 @@ where $\ten{r}_{ab} = \ten{r}_a - \ten{r}_b$, $\ten{u}_{ab} = \ten{u}_a -
 $\bar{c}_{ab} = (c_a + c_b) / 2$, and $\alpha$ is the artificial
 viscosity parameter.
 
+%
+For solid mechanics the momentum equation is written as,
+\begin{equation}
+  \label{eq:sph-momentum-solid}
+  \frac{\tilde{d}\ten{u}_{a}}{dt} = - \sum_{b} m_b \bigg[
+  \bigg(\frac{p_a}{\rho_a^2} + \frac{p_b}{\rho_b^2}\bigg) \ten{I} -
+  \bigg(\frac{\teng{\sigma}^{'}_{a}}{\rho_a^2} +
+  \frac{\teng{\sigma}^{'}_{b}}{\rho_b^2} + \Pi_{ab} \ten{I} \bigg) \bigg]  \cdot \nabla_{a} W_{ab} +
+  \ten{g}_{a},
+\end{equation}
+we have not considered the correction stress term $\ten{A}$ in momentum
+equation of solid mechanics as it has a negligible effect.
 
-The Jaumann's formulation for Hooke's stress provides us with the rate of
-change of deviatoric stress,
-\begin{equation}
-  \label{eq:jaumann-stress-rate}
-  \frac{d \sigma'_{ij}}{dt} = 2G (\dot{\epsilon}_{ij} - \frac{1}{3}
-  \dot{\epsilon}_{ij} \delta_{ij}) + \sigma^{'}_{ik}  \Omega_{jk} +
-  \Omega_{ik} \sigma^{'}_{kj}
-\end{equation}
-where $G$ is the shear modulus, $\dot{\epsilon}_{ij}$ is the strain rate tensor,
-\begin{equation}
-  \label{eq:strain-tensor}
-  \dot{\epsilon}_{ij} = \frac{1}{2} \bigg(\frac{\partial u_i}{\partial x_j} +
-  \frac{\partial u_j}{\partial x_i} \bigg)
-\end{equation}
-and $\Omega_{ij}$ is the rotational tensor,
-\begin{equation}
-  \label{eq:rotational-tensor}
-  \Omega_{ij} = \frac{1}{2} \bigg(\frac{\partial u_i}{\partial x_j} -
-  \frac{\partial u_j}{\partial x_i} \bigg)
-\end{equation}
-
+In addition to these three equations, the Jaumann stress rate equation is also
+solved. In the current work we use the momentum velocity $\ten{u}$ rather than
+$\tilde{\ten{u}}$ as in the GTVF~\cite{zhang_hu_adams17} in the computation of
+gradient of velocity. The SPH discretization of the gradient of velocity is
+given as,
 \begin{equation}
   \label{eq:sph-vel-grad}
   \nabla \ten{u}_a =
   - \sum_{b} \frac{m_b}{\rho_{b}} (\ten{u}_{a} - \ten{u}_{b}) \otimes (\nabla_{a} W_{ab}),
 \end{equation}
+where $\otimes$ is the outer product.
+
+The SPH discretization of the modified Jaumann stress rate
+\cref{eq:modified-jaumann-stress-rate} is given as,
+\begin{multline}
+  \label{eq:sph-modified-jaumann-stress}
+  \frac{\tilde{d}\teng{\sigma}^{'}_{a}}{dt} = 2G (\dot{\teng{\epsilon}}_{a} -
+  \frac{1}{3} \dot{\teng{\epsilon}}_{a} \ten{I}) + \teng{\sigma}^{'}_{a}
+  \teng{\Omega}_{a}^{T} +
+  \teng{\Omega}_{a} \teng{\sigma}^{'}_{a} + \\
+  + \sum_{b} \; \frac{m_b}{\rho_{b}} \; (\teng{\sigma}^{'} \otimes (\tilde{\ten{u}} -
+  \ten{u}))_{ab} \; \cdot \nabla_{a} W_{ab}
+  + \teng{\sigma}^{'}_{a} \sum_{b} \; \frac{m_b}{\rho_{b}} \;
+  (\tilde{\ten{u}} - \ten{u})_{ab} \; \cdot \nabla_{a} W_{ab}.
+\end{multline}
 
 
+\subsection{Transport velocity computation of the mediums}
+
+The particles in the current scheme are moved with the transport velocity,
 \begin{equation}
-  \label{eq:pressure-equation}
-  p = K \bigg(\frac{\rho}{\rho_{0}} - 1 \bigg),
+  \label{eq:transport_velocity_position_derivative}
+  \frac{d\ten{r}_a}{dt} = \ten{\tilde{u}}_a.
 \end{equation}
-where $K = \rho_{0} c_0^2$ is the bulk modulus. Here, the constants $c_0$ and
-$\rho_0$ are the reference speed of sound and density, respectively.
+%
+The transport velocity is updated using,
+\begin{equation}
+  \label{eq:transport_velocity}
+  \ten{\tilde{u}}_a(t + \Delta t) =\ten{u}_a(t) + \Delta t \; \frac{\tilde{d} \ten{u}_a}{dt} +
+  \bigg(\frac{d \ten{u}_{a}}{dt}\bigg)_{\text{c}} \Delta t
+\end{equation}
+
+Where $\big(\frac{d \ten{u}_a}{dt}\big)_{\text{c}}$ is the homogenization
+acceleration which ensures that the particle positions are homogeneous. In the
+current work we have explored two kinds of homogenization accelerations, one
+is a displacement based technique due to \citet{sun2017deltaplus}, and the
+other is the iterative particle shifting technique due to
+\citet{huang_kernel_2019}. These are discussed in the following.
 
 
-\subsection{Boundary conditions}
+\subsubsection{Transport velocity computation of fluid medium}
+\label{sec:fluid_pst}
+
+In \citet{sun2017deltaplus}, the particle shifting technique was implemented as
+a particle displacement ($\delta \ten{r}$). This was modified in
+\citet{sun_consistent_2019} to be computed as a change to the velocity. In the
+present work we modify this to be treated as an acceleration to the particle
+in order to unify the treatment of different PST methods.
+
+Firstly, the velocity deviation based equation is given as,
+\begin{equation}
+  \label{eq:sun2019_pst}
+  \delta \ten{u}_a = - \text{Ma} \; (2h) c_0 \sum_b \bigg[
+  1 + R \bigg( \frac{W_{ab}}{W(\Delta x)} \bigg)^n  \bigg] \nabla_a W_{ab} V_b,
+\end{equation}
+%
+it is modified to force based as,
+\begin{equation}
+  \label{eq:sun2019_pst}
+  \bigg(\frac{d \ten{u}_a}{dt}\bigg)_{\text{c}} = - \frac{\text{Ma} \;
+    (2h) c_0}{\Delta t} \sum_b \bigg[1 + R \bigg( \frac{W_{ab}}{W(\Delta x)} \bigg)^n
+  \bigg] \nabla_a W_{ab} V_b,
+\end{equation}
+where $R$ is an adjustment factor to handle the tensile instability, and
+$\text{Ma}$ is the mach number of the flow. $V_b$ is the volume of the
+$b$\textsuperscript{th} particle. The acceleration is changed to account for
+particles that are on the free surface. We use $R = 0.2$ and $n = 4$ as
+suggested by \citet{sun_consistent_2019}.
 
 
-\subsection{Time integration}
+\subsubsection{Transport velocity computation of solid medium}
+\label{sec:elastic_solid_pst}
 
+In \citet{sun2017deltaplus}, the particle shifting technique was implemented as
+a particle displacement ($\delta \ten{r}$). This was modified in
+\citet{sun_consistent_2019} to be computed as a change to the velocity. In the
+present work we modify this to be treated as an acceleration to the particle
+in order to unify the treatment of different PST methods.
+
+Firstly, the velocity deviation based equation is given as,
+\begin{equation}
+  \label{eq:sun2019_pst}
+  \delta \ten{u}_a = - \text{Ma} \; (2h) c_0 \sum_b \bigg[
+  1 + R \bigg( \frac{W_{ab}}{W(\Delta x)} \bigg)^n  \bigg] \nabla_a W_{ab} V_b,
+\end{equation}
+%
+it is modified to force based as,
+\begin{equation}
+  \label{eq:sun2019_pst}
+  \bigg(\frac{d \ten{u}_a}{dt}\bigg)_{\text{c}} = - \frac{\text{Ma} \;
+    (2h) c_0}{\Delta t} \sum_b \bigg[1 + R \bigg( \frac{W_{ab}}{W(\Delta x)} \bigg)^n
+  \bigg] \nabla_a W_{ab} V_b,
+\end{equation}
+where $R$ is an adjustment factor to handle the tensile instability, and
+$\text{Ma}$ is the mach number of the flow. $V_b$ is the volume of the
+$b$\textsuperscript{th} particle. The acceleration is changed to account for
+particles that are on the free surface. We use $R = 0.2$ and $n = 4$ as
+suggested by \citet{sun_consistent_2019}.
+
+
+\section{Fluid structure interaction}
 
 \subsection{Coupling between fluid and solid}
 \label{subsec:fsi-coupling}
@@ -296,13 +412,128 @@ One more way of coupling is by using \citet{khayyer2018enhanced} formulation.
 
 
 
-\subsection{Total energy of the structure}
-\label{sec:total-energy-struct}
+% \subsection{Total energy of the structure}
+% \label{sec:total-energy-struct}
 
-\citet{khayyer2018enhanced} had an extra section where he discusses about the
-energy conservation properties of the proposed FSI scheme. He discusses
-different energies in structure, kinetic energy and strain energy.
+% \citet{khayyer2018enhanced} had an extra section where he discusses about the
+% energy conservation properties of the proposed FSI scheme. He discusses
+% different energies in structure, kinetic energy and strain energy.
 
+
+\section{Summary equations of the full model to be solved}
+
+\subsection{Summary equations fluid model}
+
+\begin{equation}
+  \label{eq:sph-discretization-continuity}
+  \frac{\tilde{d}\rho_a}{dt} = \sum_{b} \; \frac{m_b}{\rho_{b}} \; (
+  \rho_{a} \; \tilde{\ten{u}}_{ab} \; + \;
+  (\rho \; (\tilde{\ten{u}} \; - \;
+  \ten{u}))_{ab}) \; \cdot \nabla_{a} W_{ab},
+\end{equation}
+
+\begin{multline}
+  \label{eq:sph-discretization-edac}
+  \frac{\tilde{d}p_a}{dt} = \sum_{b} \; \frac{m_b}{\rho_{b}} \; \bigg(
+  (p_{a} - \rho_{a} c_{s}^2) \; \ten{u}_{ab} \; + \;
+  p_{a} \; \tilde{\ten{u}}_{ab} \; - \;
+  (p \; (\tilde{\ten{u}} - \ten{u}))_{ab} \; + \; \\
+  4 \; \nu_{edac}
+  \frac{p_a - p_b}{(\rho_a + \rho_b) (r^2_{ab} + 0.01 h_{ab}^{2})} \ten{r}_{ab}
+  \bigg) \; \cdot \nabla_{a} W_{ab}.
+\end{multline}
+%
+
+\begin{multline}
+  \label{eq:sph-momentum-fluid}
+  \frac{\tilde{d}\ten{u}_{a}}{dt} = - \sum_{b} m_b \bigg[
+  \bigg(\frac{p_a}{\rho_a^2} + \frac{p_b}{\rho_b^2}\bigg) \ten{I} -
+  \bigg(\frac{\ten{A}_a}{\rho_a^2} + \frac{\ten{A}_b}{\rho_b^2} + \Pi_{ab}
+  \ten{I} \bigg) \bigg]
+  \cdot \nabla_{a} W_{ab} \\
+  + \ten{u}_{a} \sum_{b} \frac{m_b}{\rho_{b}} \; \tilde{\ten{u}}_{ab} \cdot
+  \nabla_{a} W_{ab} + \sum_{b} m_b \frac{4 \eta \nabla W_{ab}\cdot
+    \ten{r}_{ab}}{(\rho_a + \rho_b) (r_{ab}^2 + 0.01 h_{ab}^2)} \ten{u}_{ab} +
+  \ten{g}_{a},
+\end{multline}
+
+
+\begin{equation}
+  \label{eq:transport_velocity}
+  \ten{\tilde{u}}_a(t + \Delta t) =\ten{u}_a(t) + \Delta t \; \frac{\tilde{d} \ten{u}_a}{dt} +
+  \bigg(\frac{d \ten{u}_{a}}{dt}\bigg)_{\text{c}} \Delta t
+\end{equation}
+
+
+\begin{equation}
+  \label{eq:gtvf_pst}
+  \bigg(\frac{d \ten{u}_a}{dt}\bigg)_{\text{c}} = p_a^0 \;
+  \sum_b m_b \frac{1}{\rho_a^2} \nabla_a \widetilde{W}_{ab} ,
+\end{equation}
+
+
+\subsection{Summary equations solid model}
+
+
+\begin{equation}
+  \label{eq:sph-discretization-continuity}
+  \frac{\tilde{d}\rho_a}{dt} = \sum_{b} \; \frac{m_b}{\rho_{b}} \; (
+  \rho_{a} \; \tilde{\ten{u}}_{ab} \; + \;
+  (\rho \; (\tilde{\ten{u}} \; - \;
+  \ten{u}))_{ab}) \; \cdot \nabla_{a} W_{ab},
+\end{equation}
+
+
+\begin{equation}
+  \label{eq:sph-momentum-solid}
+  \frac{\tilde{d}\ten{u}_{a}}{dt} = - \sum_{b} m_b \bigg[
+  \bigg(\frac{p_a}{\rho_a^2} + \frac{p_b}{\rho_b^2}\bigg) \ten{I} -
+  \bigg(\frac{\teng{\sigma}^{'}_{a}}{\rho_a^2} +
+  \frac{\teng{\sigma}^{'}_{b}}{\rho_b^2} + \Pi_{ab} \ten{I} \bigg) \bigg]  \cdot \nabla_{a} W_{ab} +
+  \ten{g}_{a},
+\end{equation}
+
+\begin{equation}
+  \label{eq:sph-modified-jaumann-stress}
+  \frac{\tilde{d}\teng{\sigma}^{'}_{a}}{dt} = 2G (\dot{\teng{\epsilon}}_{a} -
+  \frac{1}{3} \dot{\teng{\epsilon}}_{a} \ten{I}) + \teng{\sigma}^{'}_{a}
+  \teng{\Omega}_{a}^{T} +
+  \teng{\Omega}_{a} \teng{\sigma}^{'}_{a}
+\end{equation}
+
+\begin{equation}
+  \label{eq:strain-tensor}
+  \dot{\epsilon}_{ij} = \frac{1}{2} \bigg(\frac{\partial u_i}{\partial x_j} +
+  \frac{\partial u_j}{\partial x_i} \bigg),
+\end{equation}
+and $\Omega_{ij}$ is the rotation tensor,
+\begin{equation}
+  \label{eq:rotational-tensor}
+  \Omega_{ij} = \frac{1}{2} \bigg(\frac{\partial u_i}{\partial x_j} -
+  \frac{\partial u_j}{\partial x_i} \bigg).
+\end{equation}
+
+
+\begin{equation}
+  \label{eq:sph-vel-grad}
+  \nabla \ten{u}_a =
+  - \sum_{b} \frac{m_b}{\rho_{b}} (\ten{u}_{a} - \ten{u}_{b}) \otimes (\nabla_{a} W_{ab}),
+\end{equation}
+
+
+\begin{equation}
+  \label{eq:transport_velocity}
+  \ten{\tilde{u}}_a(t + \Delta t) =\ten{u}_a(t) + \Delta t \; \frac{\tilde{d} \ten{u}_a}{dt} +
+  \bigg(\frac{d \ten{u}_{a}}{dt}\bigg)_{\text{c}} \Delta t
+\end{equation}
+
+
+\begin{equation}
+  \label{eq:sun2019_pst}
+  \bigg(\frac{d \ten{u}_a}{dt}\bigg)_{\text{c}} = - \frac{\text{Ma} \;
+    (2h) c_0}{\Delta t} \sum_b \bigg[1 + R \bigg( \frac{W_{ab}}{W(\Delta x)} \bigg)^n
+  \bigg] \nabla_a W_{ab} V_b,
+\end{equation}
 
 
 \section{Results and discussion}
@@ -311,14 +542,6 @@ different energies in structure, kinetic energy and strain energy.
 We can get many simple to advanced benchmarks in this area by looking at
 applied ocean engineering, coastal engineering, journal of fluids and
 structures, marine structures and ocean engineering papers.
-
-
-The papers we have followed for the benchmarks are
-\citet{sun2021accurate}, \citet{yang2016numerical}, \citet{Sun2019study},
-\citet{He2017coupled}, \citet{khayyer2018enhanced}, \citet{sun2015numerical},
-\citet{wang2020scale}, \citet{peng2021coupling}, \citet{zhang2021deltasph},
-\citet{zhan2019stabilized}, \citet{khayyer2021multi},
-\citet{long2021coupling}, \citet{ng2020coupled},
 
 
 % =========================================
@@ -407,118 +630,71 @@ results with a reasonable accuracy.
 \subsection{Ng 2020 Hydrostatic water column on an elastic plate}
 \label{sec:hydrostatic-water-column-on-an-composite-elastic-plate}
 
-This has two simulations, one taken from \cite{ng2020coupled} and \cite{khayyer2021coupled}.
-\begin{table}[!ht]
-  \centering
-  \begin{tabular}[!ht]{ll}
-    % \toprule
-    Quantity & Values \\
-    % \midrule
-    $D$, Diameter & 2m \\
-    $\rho_0$, reference density & 1000kg/m\textsuperscript{3} \\
-    $c_s$ & 10m/s \\
-    $D/\Delta x_{\max}$, lowest resolution & 4 \\
-    $D/\Delta x_{\min} $, highest resolution & 160, 250, 500\\
-    $C_r$ & 1.08 \\
-    Reynolds number & 40, 550, 1000, 3000, and 9500 \\
-    Time of simulation & 6 \\
-    % \bottomrule
-  \end{tabular}
-  \caption{Parameters used for the flow past a circular cylinder problem.}%
-  \label{tab:fpc-params}
-\end{table}
-%
+In the first example, a hydrostatic water column on an elastic plate is
+considered. The initial setup of the system with water pressure is shown in
+figure, where an initial column of fluid under hydrostatic state is rested on an
+elastic plate under gravity. The water column is $2$ m in height and $0.5$ m in
+width, while the elastic plate is of $0.05$ m in thickness and $0.5$ m in
+length, respectively. The elastic plate considered here is made of Aluminium,
+whose material properties are: Young's modulus $E = 67.5$ GPa, Poisson's ratio
+$\nu = 0.4$. According to the analytical solution \cite{sfsfd}, the deflection
+magnitude at mid-span after the system's equilibrium state is
+$d = -6.85 \times 10^{-5}$ m.
+
 %
 %
 \begin{figure}[!htpb]
   \centering
-  \includegraphics[width=0.4\textwidth]{images/hydrostatic_water_column_on_an_elastic_plate/hydrostatic_water_column_on_an_elastic_plate}
-  \caption{Hydrostatic tank}
+  \includegraphics[width=0.4\textwidth]{figures/ng_2020_hydrostatic_water_column_on_elastic_plate/good_vs_bad}
+  \caption{Hydrostatic water column on an elastic plate}
+\label{fig:hs-water-on-plate}
+\end{figure}
+%
+%
+
+The simulation is ran for a total time of 0.4 s. For convergence study, three
+different particle resolutions, respectively
+$h_e / delta_x = 10, h_e / delta_x = 10, h_e / delta_x = 10 $are adopted,
+whose respective total number of particles are 1122232 and 1122323. The time
+step of the fluid and solid phase are computed separately, but we use
+substepping to update the fluid and solid phases as per section
+\ref{section:substepping}.
+
+
+%
+%
+\begin{figure}[!htpb]
+  \centering
+  \includegraphics[width=0.4\textwidth]{figures/ng_2020_hydrostatic_water_column_on_elastic_plate/good_vs_bad}
+  \caption{Hydrostatic water column on an elastic plate}
 \label{fig:hs-water-on-plate}
 \end{figure}
 %
 %
 
 
-\todoin{Comment on the Poisson ratio range of the current scheme}
-\todoin{Who did it previously}
-\todoin{How to derive the analytical solution in short}
-\todoin{Write about the different resolutions}
-\todoin{Any other artificial parameters regarding the scheme, alpha, beta}
-
-\todoin{In this problem we check the accuracy and stability-preserving property of the
-proposed scheme in handling the fluid structure interaction. This problem has
-been studied in Li et al. (2015), Fourey et al. (2017), Khayyer et
-al. (2018a), Hu et al. (2019), (2021), (2021) papers. This benchmark has an
-analytical solution derived in Li et al. (2015).}
-
-
-The first benchmark test to validate the fluid structure interaction model
-corresponds to an elastic plate under a hydrostatic water tank. An elastic
-plate of length 1m and width of 5cm is placed under a block of water column of
-height 2m is allowed to settle under gravity. The elastic plate is fixed on
-both the ends. The material properties of the water are as follows, the
-density is 1000 $kg/m^3$, viscosity of $1e-6$. And the material properties of
-the elastic plate are as follows, density 2700$kg/m^3$, Young's modulus
-$67.5 \times 10^7$ Pa and a Poisson ratio of 0.34. Three different particle
-spacing are considered. Initially the fluid is set up with a hydrostatic
-pressure distribution as in equation,
+% This has two simulations, one taken from \cite{ng2020coupled} and \cite{khayyer2021coupled}.
+% \begin{table}[!ht]
+%   \centering
+%   \begin{tabular}[!ht]{ll}
+%     % \toprule
+%     Quantity & Values \\
+%     % \midrule
+%     $D$, Diameter & 2m \\
+%     $\rho_0$, reference density & 1000kg/m\textsuperscript{3} \\
+%     $c_s$ & 10m/s \\
+%     $D/\Delta x_{\max}$, lowest resolution & 4 \\
+%     $D/\Delta x_{\min} $, highest resolution & 160, 250, 500\\
+%     $C_r$ & 1.08 \\
+%     Reynolds number & 40, 550, 1000, 3000, and 9500 \\
+%     Time of simulation & 6 \\
+%     % \bottomrule
+%   \end{tabular}
+%   \caption{Parameters used for the flow past a circular cylinder problem.}%
+%   \label{tab:fpc-params}
+% \end{table}
+% %
 %
-%
-\begin{equation}
-  f_a^F = -m_i \sum_{a} m_a \bigg(\frac{p_a}{\rho_{a}^2} +
-  \frac{p_i}{\rho_{i}^2} + \Pi_{ai} \bigg) \nabla_{a} W(x_{ai}).
-\end{equation}
-%
-%
-Once the plate reaches an equilibrium state, the
-deflection at the midpoint is compared with the analytical solution,
-%
-%
-\begin{equation}
-  f_a^F = -m_i \sum_{a} m_a \bigg(\frac{p_a}{\rho_{a}^2} +
-  \frac{p_i}{\rho_{i}^2} + \Pi_{ai} \bigg) \nabla_{a} W(x_{ai}).
-\end{equation}
-%
-%
-%
-\begin{figure}[!htpb]
-  \centering
-  \includegraphics[width=1\textwidth]{figures/khayyer_2021_hydrostatic_water_column_on_composite_elastic_plate/y_amplitude}
-  \caption{Hydrostatic tank}
-\label{fig:y-disp-hs-water-on-plate}
-\end{figure}
-%
-%
-\Cref{fig:y-disp-hs-water-on-plate} depicts the time histories of the plate's
-center point deflection with three different particle spacing. From the
-presented \Cref{fig:y-disp-hs-water-on-plate} and table \todoin{citetable} we
-can see as the particle spacing is reduced the numerical solution by the
-current model approaches the analytical model, which proves the convergence
-properties of the current scheme. \todoin{compare with other numerical schemes}
-%
-%
-%
-\begin{figure}[!htpb]
-  \centering
-  \includegraphics[width=1\textwidth]{figures/khayyer_2021_hydrostatic_water_column_on_composite_elastic_plate/y_amplitude}
-  \caption{Hydrostatic tank}
-\label{fig:p-hs-tank-elastic-plate}
-\end{figure}
-%
-%
-%
-\begin{figure}[!htpb]
-  \centering
-  \includegraphics[width=1\textwidth]{figures/khayyer_2021_hydrostatic_water_column_on_composite_elastic_plate/y_amplitude}
-  \caption{Hydrostatic tank}
-\label{fig:sigma-hs-tank-elastic-plate}
-\end{figure}
-
-\Cref{fig:p-hs-tank-elastic-plate} shows the pressure distribution in the
-fluid domain at different time histories. \Cref{fig:sigma-hs-water-on-plate}
-shows the plots of $\sigma_{00}$ distribution of the elastic plate at
-different time steps.
 
 \FloatBarrier%
 
@@ -613,6 +789,5 @@ results with a reasonable accuracy.
 
 %%% Local Variables:
 %%% mode: latex
-%%% TeX-master: "paper"
-%%% fill-column: 78
+%%% TeX-master: t
 %%% End:

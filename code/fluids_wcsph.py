@@ -613,9 +613,9 @@ class FluidsWCSPHScheme(Scheme):
                             dest=fluid, sources=self.solids, nu=self.nu))
 
             eqs.append(
-                FluidMomentumEquationPressureGradientRogers(dest=fluid, sources=all,
-                                                            gx=self.gx, gy=self.gy,
-                                                            gz=self.gz), )
+                FluidMomentumEquationPressureGradientRogers(
+                    dest=fluid, sources=all, gx=self.gx, gy=self.gy,
+                    gz=self.gz), )
 
         stage2.append(Group(equations=eqs, real=True))
 

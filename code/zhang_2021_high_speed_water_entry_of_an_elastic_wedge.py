@@ -187,7 +187,8 @@ class WaterEntryOfElasticWedge(Application):
         # properties related to the elastic wedge
         # ================================================
         # elastic wedge is made of rubber
-        self.wedge_size = 0.60925
+        # self.wedge_size = 0.60925
+        self.wedge_size = 0.60
         self.wedge_width = 0.04
         self.wedge_spacing = self.fluid_spacing
         self.wedge_rho0 = 2700
@@ -195,9 +196,10 @@ class WaterEntryOfElasticWedge(Application):
         self.wedge_nu = 0.34
         self.c0_wedge = get_speed_of_sound(self.wedge_E, self.wedge_nu,
                                            self.wedge_rho0)
+        # print(self.c0_wedge)
         # self.c0 = 5960
-        # print("speed of sound is")
-        # print(self.c0)
+        print("speed of sound is")
+        print(self.c0_wedge)
         self.pb_wedge = self.wedge_rho0 * self.c0_wedge**2
 
         self.edac_alpha = 0.5
@@ -206,7 +208,7 @@ class WaterEntryOfElasticWedge(Application):
 
         # attributes for Sun PST technique
         # dummy value, will be updated in consume user options
-        self.u_max_wedge = 1.
+        self.u_max_wedge = 30.
         self.mach_no_wedge = self.u_max_wedge / self.c0_wedge
 
         # for pre step
@@ -327,7 +329,7 @@ class WaterEntryOfElasticWedge(Application):
                                  'A_index',
                                  'B_index',
                                  'C_index'])
-        wedge.add_output_arrays(['is_boundary'])
+        wedge.add_output_arrays(['is_boundary', 'p_fsi'])
         return [fluid, tank, wedge]
 
     def create_scheme(self):
@@ -466,20 +468,34 @@ class WaterEntryOfElasticWedge(Application):
         arrays = data['arrays']
         pa = arrays['wedge']
         # Displacement of the middle of the wedge (Index B)
-        index = np.where(pa.B_index == 1)[0][0]
-        y_0 = pa.y[index]
+        index_B = np.where(pa.B_index == 1)[0][0]
+        y_0 = pa.y[index_B]
+
+        # for pressure computation
+        index_C = np.where(pa.C_index == 1)[0][0]
+        index_A = np.where(pa.A_index == 1)[0][0]
+        patActvf, patCctvf = [], []
 
         files = files[0::1]
-        t_ctvf, yatbctvf = [], []
+        t_ctvf, yatBctvf = [], []
         for sd, wedge in iter_output(files, 'wedge'):
             _t = sd['t']
             t_ctvf.append(_t)
-            yatbctvf.append(abs(y_0 - wedge.y[index]))
+
+            y_tmp = y_0 - 30. * _t
+            yatBctvf.append(wedge.y[index_B] - y_tmp)
+
+            # save the pressure data
+            patActvf.append(wedge.p_fsi[index_A])
+            patCctvf.append(wedge.p_fsi[index_C])
 
         # Numerical data
         path = os.path.abspath(__file__)
         directory = os.path.dirname(path)
 
+        # ================================ #
+        # Plot the displacement at point B
+        # ================================ #
         # load the data
         # The data of mid point deflection is extracted from "A coupled
         # smoothed  particle hydrodynamic and finite particle method: An
@@ -497,31 +513,18 @@ class WaterEntryOfElasticWedge(Application):
             os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_y_displacement_li_2015_sph_fem.csv'),
             delimiter=',')
 
-        tyatbanalytical, yatbanalytical = data_y_at_b_disp_analytical[:, 0], data_y_at_b_disp_analytical[:, 1]
-        tyatbfourey, yatbfourey = data_y_at_b_disp_fourey_2010[:, 0], data_y_at_b_disp_fourey_2010[:, 1]
-        tyatbli, yatbli = data_y_at_b_disp_li_2015[:, 0], data_y_at_b_disp_li_2015[:, 1]
-
-        res = os.path.join(self.output_dir, "results.npz")
-        np.savez(res,
-                 tyatbanalytical=tyatbanalytical,
-                 yatbanalytical=yatbanalytical,
-
-                 tyatbfourey=tyatbfourey,
-                 yatbfourey=yatbfourey,
-
-                 tyatbli=tyatbli,
-                 yatbli=yatbli,
-
-                 t_ctvf=t_ctvf,
-                 yatbctvf=yatbctvf)
+        tyatBanalytical, yatBanalytical = data_y_at_b_disp_analytical[:, 0], data_y_at_b_disp_analytical[:, 1]
+        tyatBfourey, yatBfourey = data_y_at_b_disp_fourey_2010[:, 0], data_y_at_b_disp_fourey_2010[:, 1]
+        tyatBli, yatBli = data_y_at_b_disp_li_2015[:, 0], data_y_at_b_disp_li_2015[:, 1]
 
         plt.clf()
 
-        # yatbanalytical reads y_at_b_analytical
-        plt.plot(tyatbanalytical, yatbanalytical, "o-", label='Analytical')
-        plt.plot(tyatbfourey, yatbfourey, "^-", label='Fourey 2010, SPH-FEM')
-        plt.plot(tyatbli, yatbli, "+-", label='Li 2015, SPH-FEM')
-        plt.plot(t_ctvf, yatbctvf, "-", label='CTVF')
+        # yatBanalytical reads y_at_b_analytical
+        plt.plot(tyatBanalytical, yatBanalytical, "o-", label='Analytical')
+        plt.plot(tyatBfourey, yatBfourey, "^-", label='Fourey 2010, SPH-FEM')
+        plt.plot(tyatBli, yatBli, "+-", label='Li 2015, SPH-FEM')
+        plt.plot(t_ctvf, yatBctvf, "-", label='CTVF')
+        # plt.plot(t_ctvf, y_wedge, "-", label='Rigid')
         plt.title('Displacement at mid point of wedge')
 
         plt.xlabel('t')
@@ -529,6 +532,138 @@ class WaterEntryOfElasticWedge(Application):
         plt.legend()
         fig = os.path.join(os.path.dirname(fname), "b_displacement_with_t.png")
         plt.savefig(fig, dpi=300)
+        # ================================ #
+        # Plot the displacement at point B
+        # ================================ #
+
+        # ============================ #
+        # Plot the pressure at point A
+        # ============================ #
+        # load the data
+        # The data of pressure at point A and C deflection is extracted from
+        # " A SPH-SPIM coupled method for fluid-structure interaction problems"
+
+        data_p_at_A_analytical = np.loadtxt(
+            os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_pressure_point_A_analytical.csv'),
+            delimiter=',')
+
+        data_p_at_A_khayyer_2018_sph = np.loadtxt(
+            os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_pressure_point_A_khayyer_2018_sph.csv'),
+            delimiter=',')
+
+        data_p_at_A_oger_2010_sph = np.loadtxt(
+            os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_pressure_point_A_oger_2010_sph.csv'),
+            delimiter=',')
+
+        tpatAanalytical, patAanalytical = data_p_at_A_analytical[:, 0], data_p_at_A_analytical[:, 1]
+        tpatAkhayyer, patAkhayyer = data_p_at_A_khayyer_2018_sph[:, 0], data_p_at_A_khayyer_2018_sph[:, 1]
+        tpatAoger, patAoger = data_p_at_A_oger_2010_sph[:, 0], data_p_at_A_oger_2010_sph[:, 1]
+
+        patAanalytical *= 1e7
+        patAkhayyer *= 1e7
+        patAoger *= 1e7
+
+        plt.clf()
+
+        # yatBanalytical reads y_at_b_analytical
+        plt.plot(tpatAanalytical, patAanalytical, "o-", label='Analytical')
+        plt.plot(tpatAkhayyer, patAkhayyer, "^-", label='Khayyer 2018, SPH')
+        plt.plot(tpatAoger, patAoger, "+-", label='Oger 2010, SPH')
+        plt.plot(t_ctvf, patActvf, "-", label='CTVF')
+        plt.title('Pressure at point A of wedge')
+
+        plt.xlabel('t')
+        plt.ylabel('pressure')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "A_pressure_with_t.png")
+        plt.savefig(fig, dpi=300)
+
+        # ============================ #
+        # Plot the pressure at point A
+        # ============================ #
+
+        # ============================ #
+        # Plot the pressure at point C
+        # ============================ #
+        # load the data
+        # The data of pressure at point A and C deflection is extracted from
+        # " A SPH-SPIM coupled method for fluid-structure interaction problems"
+
+        data_p_at_C_analytical = np.loadtxt(
+            os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_pressure_point_C_analytical.csv'),
+            delimiter=',')
+
+        data_p_at_C_khayyer_2018_sph = np.loadtxt(
+            os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_pressure_point_C_khayyer_2018_sph.csv'),
+            delimiter=',')
+
+        data_p_at_C_oger_2010_sph = np.loadtxt(
+            os.path.join(directory, 'zhang_2021_high_speed_water_entry_of_an_elastic_wedge_pressure_point_C_oger_2010_sph.csv'),
+            delimiter=',')
+
+        tpatCanalytical, patCanalytical = data_p_at_C_analytical[:, 0], data_p_at_C_analytical[:, 1]
+        tpatCkhayyer, patCkhayyer = data_p_at_C_khayyer_2018_sph[:, 0], data_p_at_C_khayyer_2018_sph[:, 1]
+        tpatCoger, patCoger = data_p_at_C_oger_2010_sph[:, 0], data_p_at_C_oger_2010_sph[:, 1]
+
+        patCanalytical *= 1e7
+        patCkhayyer *= 1e7
+        patCoger *= 1e7
+
+        plt.clf()
+
+        # yatBanalytical reads y_at_b_analytical
+        plt.plot(tpatCanalytical, patCanalytical, "o-", label='Analytical')
+        plt.plot(tpatCkhayyer, patCkhayyer, "^-", label='Khayyer 2018, SPH')
+        plt.plot(tpatCoger, patCoger, "+-", label='Oger 2010, SPH')
+        plt.plot(t_ctvf, patCctvf, "-", label='CTVF')
+        plt.title('Pressure at point C of wedge')
+
+        plt.xlabel('t')
+        plt.ylabel('pressure')
+        plt.legend()
+        fig = os.path.join(os.path.dirname(fname), "C_pressure_with_t.png")
+        plt.savefig(fig, dpi=300)
+
+        # ============================ #
+        # Plot the pressure at point C
+        # ============================ #
+
+        # save all the data
+        res = os.path.join(self.output_dir, "results.npz")
+        np.savez(res,
+                 tyatBanalytical=tyatBanalytical,
+                 yatBanalytical=yatBanalytical,
+
+                 tyatBfourey=tyatBfourey,
+                 yatBfourey=yatBfourey,
+
+                 tyatBli=tyatBli,
+                 yatBli=yatBli,
+
+                 t_ctvf=t_ctvf,
+                 yatBctvf=yatBctvf,
+
+                 tpatCanalytical=tpatCanalytical,
+                 patCanalytical=patCanalytical,
+
+                 tpatCkhayyer=tpatCkhayyer,
+                 patCkhayyer=patCkhayyer,
+
+                 tpatCoger=tpatCoger,
+                 patCoger=patCoger,
+
+                 patCctvf=patCctvf,
+
+                 tpatAanalytical=tpatAanalytical,
+                 patAanalytical=patAanalytical,
+
+                 tpatAkhayyer=tpatAkhayyer,
+                 patAkhayyer=patAkhayyer,
+
+                 tpatAoger=tpatAoger,
+                 patAoger=patAoger,
+
+                 patActvf=patActvf)
 
 
 if __name__ == '__main__':

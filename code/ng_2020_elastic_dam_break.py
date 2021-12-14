@@ -317,7 +317,7 @@ class ElasticGate(Application):
         gate_support.rho_fsi[:] = self.fluid_density
 
         # set the pressure of the fluid
-        fluid.p[:] = - self.fluid_density * self.gy * (max(fluid.y) - fluid.y[:])
+        # fluid.p[:] = - self.fluid_density * self.gy * (max(fluid.y) - fluid.y[:])
 
         gate.add_output_arrays(['tip_displacemet_index'])
 
@@ -404,7 +404,7 @@ class ElasticGate(Application):
             mach_no_fluid=self.mach_no_fluid,
             mach_no_structure=self.mach_no_gate,
             gy=self.gy,
-            alpha_fluid=0.1,
+            alpha_fluid=0.05,
             alpha_solid=1.,
             beta_solid=0,
             dt_fluid=self.dt_fluid,

@@ -2,6 +2,9 @@
 import os
 import matplotlib.pyplot as plt
 
+# https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib
+from matplotlib import colors as mcolors
+
 from itertools import product
 import json
 from automan.api import PySPHProblem as Problem
@@ -12,7 +15,31 @@ import numpy as np
 import matplotlib
 from pysph.solver.utils import load, get_files
 
-matplotlib.use('pdf')
+matplotlib.use('agg')
+from cycler import cycler
+from matplotlib import rc, patches, colors
+from matplotlib.collections import PatchCollection
+
+rc('font', **{'family': 'Helvetica', 'size': 12})
+rc('legend', fontsize='xx-small')
+rc('axes', grid=True, linewidth=1.2)
+rc('axes.grid', which='both', axis='both')
+# rc('axes.formatter', limits=(1, 2), use_mathtext=True, min_exponent=1)
+rc('grid', linewidth=0.5, linestyle='--')
+rc('xtick', direction='in', top=True)
+rc('ytick', direction='in', right=True)
+rc('savefig', format='pdf', bbox='tight', pad_inches=0.05,
+   transparent=False, dpi=300)
+rc('lines', linewidth=1.5)
+rc('axes', prop_cycle=(
+    cycler('color', ['tab:blue', 'tab:green', 'tab:red',
+                     'tab:orange', 'm', 'tab:purple',
+                     'tab:pink', 'tab:gray']) +
+    cycler('linestyle', ['-.', '--', '-', ':',
+                         (0, (3, 1, 1, 1)), (0, (3, 1, 1, 1, 1, 1)),
+                         (0, (3, 2, 1, 1)), (0, (3, 2, 2, 1, 1, 1)),
+                         ])
+))
 
 # n_core = free_cores()
 # n_thread = 2 * free_cores()
@@ -365,12 +392,6 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
                 tf=3.,
                 d0=1e-2 * 0.25,
                 ), 'N=20'),
-            # 'rogers': (dict(
-            #     scheme='ctvf',
-            #     pfreq=500,
-            #     tf=1.,
-            #     rogers_eqns=None
-            #     ), 'Rogers Scheme'),
         }
 
         self.cases = [
@@ -383,9 +404,31 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
 
     def run(self):
         self.make_output_dir()
-        self.plot_figures()
+        self.plot_displacement()
+        conditions = {'d0': 1e-2 * 0.55}
 
-    def plot_figures(self):
+        # schematic
+        self.plot_prop(conditions=conditions, size=0.1,
+                       show_fluid=True, fmin=0, fmax=18000, show_structure=True,
+                       smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
+                       scmap='Greens', show_fsmap=False, times=[0],
+                       fname_prefix="schematic")
+
+        # snapshots at different timesteps
+        self.plot_prop(conditions=conditions, size=0.2,
+                       show_fluid=True, fmin=0, fmax=18000, show_structure=True,
+                       smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
+                       scmap='viridis', show_fsmap=False, times=[0.1, 0.2],
+                       fname_prefix="snap", only_colorbar=False)
+
+        # save colorbar
+        self.plot_prop(conditions=conditions, size=0.2,
+                       show_fluid=True, fmin=0, fmax=18000, show_structure=True,
+                       smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=True,
+                       scmap='viridis', show_fsmap=True, times=[0.0],
+                       fname_prefix="colorbar", only_colorbar=True)
+
+    def plot_displacement(self):
         data = {}
         for name in self.case_info:
             data[name] = np.load(self.input_path(name, 'results.npz'))
@@ -415,8 +458,92 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
         # Plot x amplitude
         # ==================================
 
+    def plot_prop(self, conditions=None,
+                  fcmap='rainbow', scmap='rainbow', figsize=(10, 4), size=20,
+                  dpi=300, show_fluid=True, fmin=-6, fmax=6,
+                  show_structure=True, smin=-6, smax=6, show_fcmap=True,
+                  show_fsmap=True, times=None, only_colorbar=False,
+                  fname_prefix=''):
+        if conditions is None:
+            conditions = {}
+        if times is None:
+            times = [1, 2, 3]
+        aspect = 70
+        pad = 0.
+        size_boundary = 0.1
+        for case in filter_cases(self.cases, **conditions):
+            filename_w_ext = os.path.basename(case.base_command.split(' ')[1])
+            filename = os.path.splitext(filename_w_ext)[0]
+            files = get_files(case.input_path(), filename)
+            logfile = case.input_path(f'{filename}.log')
+            files = get_files_at_given_times_from_log(files, times, logfile)
+            for file, t in zip(files, times):
+                fig, ax = plt.subplots(1, 1, figsize=figsize)
+                data = load(file)
+                t = data['solver_data']['t']
+                f = data['arrays']['fluid']
+                s1 = data['arrays']['tank']
+                s = data['arrays']['gate']
+                s2 = data['arrays']['gate_support']
+                label = rf"p"
+                val = f.get('p')
+                if show_fluid == True:
+                    tmp = ax.scatter(
+                        f.x, f.y, c=val, s=size, rasterized=True, cmap=fcmap,
+                        edgecolor='none', vmin=fmin, vmax=fmax
+                    )
 
-class Ng2020ElasticDamBreak(Problem):
+                    if show_fcmap == True:
+                        # cbarf = fig.colorbar(tmp, ax=ax, shrink=0.8, label=f'{label}',
+                        #                      pad=0.01, aspect=20)
+                        cbarf = fig.colorbar(tmp, ax=ax, label=f'{label}',
+                                             pad=pad, aspect=aspect,
+                                             format='%.0e')
+                        cbarf.ax.tick_params(labelsize='xx-small')
+
+                if show_structure == True:
+                    tmp2 = ax.scatter(s.x, s.y, c=s.sigma00, s=size, rasterized=True,
+                                      cmap=scmap,
+                                      edgecolor='none',
+                                      vmin=smin, vmax=smax)
+
+                    if show_fsmap == True:
+                        # cbars = fig.colorbar(tmp2, ax=ax, shrink=0.8, label=r'$\sigma_{00}$',
+                        #                      pad=0.01, aspect=20)
+                        cbars = fig.colorbar(tmp2, ax=ax, label=r'$\sigma_{00}$',
+                                             pad=pad, aspect=aspect,
+                                             format='%.0e')
+                        cbars.ax.tick_params(labelsize='xx-small')
+
+                msg = r"$t = $" + f'{t:.1f}'
+                xmin = f.x.min()
+                ymax = f.y.max()
+                ax.annotate(
+                    msg, (xmin*1.2, ymax*0.8), fontsize='small',
+                    bbox=dict(boxstyle="square,pad=0.3", fc='white')
+                )
+
+                if show_fluid == True and show_structure == True:
+                    ax.scatter(s1.x, s1.y, c=s1.m, cmap='viridis', s=size_boundary,
+                               rasterized=True)
+                    ax.scatter(s2.x, s2.y, c=s2.m, cmap='viridis', s=size_boundary,
+                               rasterized=True)
+                ax.axis('off')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.grid()
+                ax.set_aspect('equal')
+
+                if only_colorbar is True:
+                    ax.remove()
+
+                fig.savefig(self.output_path(f'{fname_prefix}_t_{t:.1f}.png'),
+                            dpi=dpi)
+                plt.clf()
+                plt.close()
+
+
+class Ng2020ElasticDamBreak(Ng2020HydrostaticWaterColumnOnElasticPlate):
     """
     Pertains to Figure 14 (a)
     """
@@ -436,11 +563,11 @@ class Ng2020ElasticDamBreak(Problem):
             #     tf=0.4,
             #     ), 'CTVF')
 
-            'wcsph_fluids': (dict(
-                scheme='wcsph_fluids',
-                pfreq=500,
-                tf=0.4,
-                ), 'wcsph_fluids'),
+            # 'wcsph_fluids': (dict(
+            #     scheme='wcsph_fluids',
+            #     pfreq=500,
+            #     tf=0.4,
+            #     ), 'wcsph_fluids'),
 
             'wcsph': (dict(
                 scheme='wcsph',
@@ -459,9 +586,31 @@ class Ng2020ElasticDamBreak(Problem):
 
     def run(self):
         self.make_output_dir()
-        self.plot_figures()
+        self.plot_displacement()
+        conditions = {'scheme': 'wcsph'}
 
-    def plot_figures(self):
+        # schematic
+        self.plot_prop(conditions=conditions, size=0.1,
+                       show_fluid=True, fmin=0, fmax=18000, show_structure=True,
+                       smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
+                       scmap='Greens', show_fsmap=False, times=[0],
+                       fname_prefix="schematic")
+
+        # snapshots at different timesteps
+        self.plot_prop(conditions=conditions, size=0.2,
+                       show_fluid=True, fmin=0, fmax=18000, show_structure=True,
+                       smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
+                       scmap='viridis', show_fsmap=False, times=[0.1, 0.2],
+                       fname_prefix="snap", only_colorbar=False)
+
+        # save colorbar
+        self.plot_prop(conditions=conditions, size=0.2,
+                       show_fluid=True, fmin=0, fmax=18000, show_structure=True,
+                       smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=True,
+                       scmap='viridis', show_fsmap=True, times=[0.0],
+                       fname_prefix="colorbar", only_colorbar=True)
+
+    def plot_displacement(self):
         data = {}
         for name in self.case_info:
             data[name] = np.load(self.input_path(name, 'results.npz'))
@@ -549,11 +698,11 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
 
         # Base case info
         self.case_info = {
-            'wcsph': (dict(
-                scheme='wcsph',
-                pfreq=300,
-                tf=0.7,
-                ), 'WCSPH'),
+            # 'wcsph': (dict(
+            #     scheme='wcsph',
+            #     pfreq=300,
+            #     tf=0.7,
+            #     ), 'WCSPH'),
 
             'wcsph_fluids': (dict(
                 scheme='wcsph_fluids',
@@ -603,7 +752,7 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
             t_ctvf = data[name]['t_ctvf']
             x_ctvf = data[name]['x_ctvf']
 
-            plt.plot(t_ctvf, x_ctvf, label=self.case_info[name][1])
+            plt.plot(t_ctvf, x_ctvf, '-', label=self.case_info[name][1])
 
         plt.xlabel('time')
         plt.ylabel('x - amplitude')
@@ -631,11 +780,17 @@ class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
 
         # Base case info
         self.case_info = {
-            'wcsph': (dict(
-                scheme='wcsph',
+            # 'wcsph': (dict(
+            #     scheme='wcsph',
+            #     pfreq=300,
+            #     tf=0.0025,
+            #     ), 'WCSPH'),
+
+            'wcsph_fluids': (dict(
+                scheme='wcsph_fluids',
                 pfreq=300,
                 tf=0.0025,
-                ), 'WCSPH'),
+                ), 'WCSPH fluids'),
 
             # 'rogers': (dict(
             #     scheme='ctvf',
@@ -659,32 +814,37 @@ class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
         self.plot_figures()
 
     def plot_figures(self):
+        self.plot_displacement()
+        self.plot_pressure_at_A()
+        self.plot_pressure_at_C()
+
+    def plot_displacement(self):
         data = {}
         for name in self.case_info:
             data[name] = np.load(self.input_path(name, 'results.npz'))
 
         rand_case = (list(data.keys())[0])
 
-        tyatbanalytical = data[rand_case]['tyatbanalytical']
-        yatbanalytical = data[rand_case]['yatbanalytical']
-        tyatbfourey = data[rand_case]['tyatbfourey']
-        yatbfourey = data[rand_case]['yatbfourey']
-        tyatbli = data[rand_case]['tyatbli']
-        yatbli = data[rand_case]['yatbli']
+        tyatBanalytical = data[rand_case]['tyatBanalytical']
+        yatBanalytical = data[rand_case]['yatBanalytical']
+        tyatBfourey = data[rand_case]['tyatBfourey']
+        yatBfourey = data[rand_case]['yatBfourey']
+        tyatBli = data[rand_case]['tyatBli']
+        yatBli = data[rand_case]['yatBli']
 
         # ==================================
         # Plot x amplitude
         # ==================================
         plt.clf()
-        plt.plot(tyatbanalytical, yatbanalytical, "o-", label='Analytical')
-        plt.plot(tyatbfourey, yatbfourey, "^-", label='Fourey 2010, SPH-FEM')
-        plt.plot(tyatbli, yatbli, "+-", label='Li 2015, SPH-FEM')
+        plt.plot(tyatBanalytical, yatBanalytical, "o-", label='Analytical')
+        plt.plot(tyatBfourey, yatBfourey, "^-", label='Fourey 2010, SPH-FEM')
+        plt.plot(tyatBli, yatBli, "+-", label='Li 2015, SPH-FEM')
 
         for name in self.case_info:
             t_ctvf = data[name]['t_ctvf']
-            yatbctvf = data[name]['yatbctvf']
+            yatBctvf = data[name]['yatBctvf']
 
-            plt.plot(t_ctvf, yatbctvf, label=self.case_info[name][1])
+            plt.plot(t_ctvf, yatBctvf, 'o-', label=self.case_info[name][1])
 
         plt.xlabel('t')
         plt.ylabel('Displacement')
@@ -695,6 +855,82 @@ class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
         plt.close()
         # ==================================
         # Plot x amplitude
+        # ==================================
+
+    def plot_pressure_at_A(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        rand_case = (list(data.keys())[0])
+
+        tpatAanalytical = data[rand_case]['tpatAanalytical']
+        patAanalytical = data[rand_case]['patAanalytical']
+        tpatAkhayyer = data[rand_case]['tpatAkhayyer']
+        patAkhayyer = data[rand_case]['patAkhayyer']
+        tpatAoger = data[rand_case]['tpatAoger']
+        patAoger = data[rand_case]['patAoger']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        plt.plot(tpatAanalytical, patAanalytical, "o-", label='Analytical')
+        plt.plot(tpatAkhayyer, patAkhayyer, "^-", label='Khayyer 2018, SPH')
+        plt.plot(tpatAoger, patAoger, "+-", label='Oger 2010, SPH')
+
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            patActvf = data[name]['patActvf']
+
+            plt.plot(t_ctvf, patActvf, "o-", label=self.case_info[name][1])
+
+        plt.xlabel('t')
+        plt.ylabel('pressure')
+        plt.legend()
+        plt.savefig(self.output_path('A_pressure_with_t.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot pressure at C
+        # ==================================
+
+    def plot_pressure_at_C(self):
+        data = {}
+        for name in self.case_info:
+            data[name] = np.load(self.input_path(name, 'results.npz'))
+
+        rand_case = (list(data.keys())[0])
+
+        tpatCanalytical = data[rand_case]['tpatCanalytical']
+        patCanalytical = data[rand_case]['patCanalytical']
+        tpatCkhayyer = data[rand_case]['tpatCkhayyer']
+        patCkhayyer = data[rand_case]['patCkhayyer']
+        tpatCoger = data[rand_case]['tpatCoger']
+        patCoger = data[rand_case]['patCoger']
+
+        # ==================================
+        # Plot x amplitude
+        # ==================================
+        plt.clf()
+        plt.plot(tpatCanalytical, patCanalytical, "o-", label='Analytical')
+        plt.plot(tpatCkhayyer, patCkhayyer, "^-", label='Khayyer 2018, SPH')
+        plt.plot(tpatCoger, patCoger, "+-", label='Oger 2010, SPH')
+
+        for name in self.case_info:
+            t_ctvf = data[name]['t_ctvf']
+            patCctvf = data[name]['patCctvf']
+
+            plt.plot(t_ctvf, patCctvf, "o-", label=self.case_info[name][1])
+
+        plt.xlabel('t')
+        plt.ylabel('pressure')
+        plt.legend()
+        plt.savefig(self.output_path('C_pressure_with_t.pdf'))
+        plt.clf()
+        plt.close()
+        # ==================================
+        # Plot pressure at C
         # ==================================
 
 

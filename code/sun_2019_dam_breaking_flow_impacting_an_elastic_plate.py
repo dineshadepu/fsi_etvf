@@ -233,7 +233,7 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         self.gate_nu = 0.0
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
-        self.u_max_gate = self.u_max_fluid
+        self.u_max_gate = 20.
         self.mach_no_gate = self.u_max_gate / self.c0_gate
         self.alpha_solid = 1.
         self.beta_solid = 0.
@@ -256,11 +256,11 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         # Create fluid
         # ===================================
         xf, yf = get_2d_block(dx=self.fluid_spacing, length=self.fluid_length,
-                              height=self.fluid_length)
+                              height=self.fluid_height)
 
         xt, yt = create_tank_2d_from_block_2d(
-            xf, yf, self.tank_length, self.tank_height, self.tank_spacing,
-            self.tank_layers)
+            xf, yf, self.tank_length - abs(min(xf)) - 0.006, self.tank_height,
+            self.tank_spacing, self.tank_layers)
 
         m_fluid = self.fluid_density * self.fluid_spacing**2.
 
@@ -345,6 +345,8 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         # ===========================
         # Adjust the geometry
         # ===========================
+        gate_support.x[:] += self.fluid_spacing/2.
+        gate.x[:] += self.fluid_spacing/2.
         remove_overlap_particles(tank, gate_support, self.fluid_spacing/2.)
 
         self.scheme.setup_properties([fluid, tank,

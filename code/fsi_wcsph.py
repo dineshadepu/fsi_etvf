@@ -607,7 +607,7 @@ class FSIWCSPHFluidsScheme(Scheme):
 
         # common properties
         self.solver = None
-        self.kernel_factor = 2
+        self.kernel_factor = 3
 
         self.attributes_changed()
 
