@@ -655,7 +655,8 @@ class FSIWCSPHFluidsScheme(Scheme):
 
     def consume_user_options(self, options):
         vars = ['alpha_fluid', 'alpha_solid', 'beta_solid',
-                'edac_alpha', 'wall_pst', 'damping', 'damping_coeff']
+                'edac_alpha', 'wall_pst', 'damping', 'damping_coeff',
+                'solid_velocity_bc']
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
 
@@ -728,11 +729,12 @@ class FSIWCSPHFluidsScheme(Scheme):
             ElasticSolidContinuityEquationUhat,
             ElasticSolidContinuityEquationETVFCorrection,
             VelocityGradient2D,
+            VelocityGradient2DUhat,
 
             ElasticSolidContinuityEquationUhatSolid,
             ElasticSolidContinuityEquationETVFCorrectionSolid,
             VelocityGradient2DSolid,
-
+            VelocityGradient2DSolidUhat,
             HookesDeviatoricStressRate,
 
             SetHIJForInsideParticles,
@@ -820,6 +822,7 @@ class FSIWCSPHFluidsScheme(Scheme):
                 g1.append(
                     ElasticSolidContinuityEquationETVFCorrection(
                         dest=structure, sources=self.structures))
+
                 g1.append(
                     VelocityGradient2D(
                         dest=structure, sources=self.structures))
@@ -834,7 +837,8 @@ class FSIWCSPHFluidsScheme(Scheme):
                             dest=structure, sources=self.structure_solids))
 
                     g1.append(
-                        VelocityGradient2DSolid(dest=structure, sources=self.structure_solids))
+                        VelocityGradient2DSolid(dest=structure,
+                                                sources=self.structure_solids))
 
             stage1.append(Group(equations=g1))
 

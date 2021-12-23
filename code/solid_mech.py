@@ -41,6 +41,29 @@ from math import sqrt, acos
 from math import pi as M_PI
 
 
+class VelocityGradient2DUhat(Equation):
+    def initialize(self, d_idx, d_v00, d_v01, d_v10, d_v11):
+        d_v00[d_idx] = 0.0
+        d_v01[d_idx] = 0.0
+        d_v10[d_idx] = 0.0
+        d_v11[d_idx] = 0.0
+
+    def loop(self, d_uhat, d_vhat, d_what, d_idx, s_idx, s_m, s_rho, d_v00,
+             d_v01, d_v10, d_v11, s_uhat, s_vhat, s_what, DWIJ):
+        vij = declare('matrix(3)')
+        vij[0] = d_uhat[d_idx] - s_uhat[s_idx]
+        vij[1] = d_vhat[d_idx] - s_vhat[s_idx]
+        vij[2] = d_what[d_idx] - s_what[s_idx]
+
+        tmp = s_m[s_idx] / s_rho[s_idx]
+
+        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
+        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
+
+        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
+        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
+
+
 # ===========================
 # Equations for ULSPH by Gray
 # ===========================
@@ -646,18 +669,29 @@ class ElasticSolidContinuityEquationETVFCorrectionSolid(Equation):
 
 
 class VelocityGradient2DSolid(Equation):
-    def initialize(self, d_idx, d_v00, d_v01, d_v10, d_v11):
-        d_v00[d_idx] = 0.0
-        d_v01[d_idx] = 0.0
-        d_v10[d_idx] = 0.0
-        d_v11[d_idx] = 0.0
-
     def loop(self, d_idx, s_idx, s_m, s_rho, d_v00, d_v01, d_v10, d_v11, d_u,
              d_v, d_w, s_ub, s_vb, s_wb, DWIJ):
         vij = declare('matrix(3)')
         vij[0] = d_u[d_idx] - s_ub[s_idx]
         vij[1] = d_v[d_idx] - s_vb[s_idx]
         vij[2] = d_w[d_idx] - s_wb[s_idx]
+
+        tmp = s_m[s_idx] / s_rho[s_idx]
+
+        d_v00[d_idx] += tmp * -vij[0] * DWIJ[0]
+        d_v01[d_idx] += tmp * -vij[0] * DWIJ[1]
+
+        d_v10[d_idx] += tmp * -vij[1] * DWIJ[0]
+        d_v11[d_idx] += tmp * -vij[1] * DWIJ[1]
+
+
+class VelocityGradient2DSolidUhat(Equation):
+    def loop(self, d_uhat, d_vhat, d_what, d_idx, s_idx, s_m, s_rho, d_v00,
+             d_v01, d_v10, d_v11, s_ubhat, s_vbhat, s_wbhat, DWIJ):
+        vij = declare('matrix(3)')
+        vij[0] = d_uhat[d_idx] - s_ubhat[s_idx]
+        vij[1] = d_vhat[d_idx] - s_vbhat[s_idx]
+        vij[2] = d_what[d_idx] - s_wbhat[s_idx]
 
         tmp = s_m[s_idx] / s_rho[s_idx]
 

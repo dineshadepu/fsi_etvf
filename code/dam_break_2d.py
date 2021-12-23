@@ -13,6 +13,7 @@ from pysph.base.utils import get_particle_array
 from pysph.examples import cavity as LDC
 from pysph.sph.equation import Equation, Group
 from fluids_wcsph import FluidsWCSPHScheme
+from fluids import FluidsETVFScheme
 
 from pysph.base.kernels import (QuinticSpline)
 from pysph.solver.solver import Solver
@@ -105,8 +106,14 @@ class Dambreak2D(DB.DamBreak2D):
             ['fluid'], ['boundary'], dim=2, rho0=ro, c0=co, nu=None,
             pb=p0, h=None, u_max=3. * vref, mach_no=mach_no,
             gy=-9.81, alpha=0.05)
+
+        etvf = FluidsETVFScheme(
+            ['fluid'], ['boundary'], dim=2, rho0=ro, c0=co, nu=None,
+            pb=p0, h=None, u_max=3. * vref, mach_no=mach_no,
+            gy=-9.81, alpha=0.05)
         schemes = super().create_scheme()
         schemes.schemes['wcsph'] = wcsph
+        schemes.schemes['etvf'] = etvf
         schemes.default = 'wcsph'
         return schemes
 
@@ -132,4 +139,4 @@ class Dambreak2D(DB.DamBreak2D):
 if __name__ == '__main__':
     app = Dambreak2D()
     app.run()
-    app.post_process(app.info_filename)
+    # app.post_process(app.info_filename)

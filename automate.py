@@ -245,6 +245,7 @@ class DamBreak2D(Problem):
         # Base case info
         self.case_info = {
             'wcsph': (dict(
+                scheme='wcsph',
                 pst='sun2019',
                 no_edac=None,
                 no_cont_vc_bc=None,
@@ -255,6 +256,7 @@ class DamBreak2D(Problem):
             ), 'WCSPH'),
 
             'wcsph_1': (dict(
+                scheme='wcsph',
                 pst='sun2019',
                 edac=None,
                 no_cont_vc_bc=None,
@@ -265,6 +267,19 @@ class DamBreak2D(Problem):
             ), 'WCSPH'),
 
             'wcsph_2': (dict(
+                scheme='wcsph',
+                pst='sun2019',
+                edac=None,
+                no_clamp_p=None,
+                cont_vc_bc=None,
+                dx=0.05,
+                tf=1.,
+                pfreq=200,
+                alpha=0.05
+            ), 'WCSPH'),
+
+            'etvf': (dict(
+                scheme='etvf',
                 pst='sun2019',
                 edac=None,
                 no_clamp_p=None,
@@ -411,21 +426,27 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
         self.plot_prop(conditions=conditions, size=0.1,
                        show_fluid=True, fmin=0, fmax=18000, show_structure=True,
                        smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
-                       scmap='Greens', show_fsmap=False, times=[0],
-                       fname_prefix="schematic")
+                       scmap='winter', show_fsmap=False, times=[0],
+                       fname_prefix="schematic", only_colorbar=False)
+
+        self.plot_prop(conditions=conditions, size=0.1,
+                       show_fluid=True, fmin=0, fmax=18000, show_structure=False,
+                       smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=True,
+                       scmap='winter', show_fsmap=False, times=[0],
+                       fname_prefix="colorbar", only_colorbar=True)
 
         # snapshots at different timesteps
         self.plot_prop(conditions=conditions, size=0.2,
                        show_fluid=True, fmin=0, fmax=18000, show_structure=True,
                        smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
-                       scmap='viridis', show_fsmap=False, times=[0.1, 0.2],
+                       scmap='viridis', show_fsmap=False, times=[0.3],
                        fname_prefix="snap", only_colorbar=False)
 
         # save colorbar
         self.plot_prop(conditions=conditions, size=0.2,
                        show_fluid=True, fmin=0, fmax=18000, show_structure=True,
                        smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=True,
-                       scmap='viridis', show_fsmap=True, times=[0.0],
+                       scmap='viridis', show_fsmap=True, times=[0.3],
                        fname_prefix="colorbar", only_colorbar=True)
 
     def plot_displacement(self):
@@ -449,7 +470,7 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
 
         plt.xlabel('time')
         plt.ylabel('y - amplitude')
-        plt.legend()
+        plt.legend(prop={'size': 12})
         # plt.tight_layout(pad=0)
         plt.savefig(self.output_path('y_amplitude.pdf'))
         plt.clf()
@@ -471,6 +492,7 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
         aspect = 70
         pad = 0.
         size_boundary = 0.1
+
         for case in filter_cases(self.cases, **conditions):
             filename_w_ext = os.path.basename(case.base_command.split(' ')[1])
             filename = os.path.splitext(filename_w_ext)[0]
@@ -516,18 +538,19 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
                         cbars.ax.tick_params(labelsize='xx-small')
 
                 msg = r"$t = $" + f'{t:.1f}'
-                xmin = f.x.min()
-                ymax = f.y.max()
-                ax.annotate(
-                    msg, (xmin*1.2, ymax*0.8), fontsize='small',
-                    bbox=dict(boxstyle="square,pad=0.3", fc='white')
-                )
+                # xmax = f.x.max()
+                # ymax = f.y.max()
+                # ax.annotate(
+                #     msg, (xmax*1.2, ymax*1.0), fontsize='small',
+                #     bbox=dict(boxstyle="square,pad=0.3", fc='white')
+                # )
 
                 if show_fluid == True and show_structure == True:
                     ax.scatter(s1.x, s1.y, c=s1.m, cmap='viridis', s=size_boundary,
                                rasterized=True)
                     ax.scatter(s2.x, s2.y, c=s2.m, cmap='viridis', s=size_boundary,
                                rasterized=True)
+                # ax.title()
                 ax.axis('off')
                 ax.set_xticks([])
                 ax.set_yticks([])
@@ -539,8 +562,46 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
 
                 fig.savefig(self.output_path(f'{fname_prefix}_t_{t:.1f}.png'),
                             dpi=dpi)
+
                 plt.clf()
                 plt.close()
+
+    def get_colorbar_limits(self, conditions=None, fval='p', sval='sigma00',
+                            times=[0]):
+        if conditions is None:
+            conditions = {}
+        if times is None:
+            times = [1, 2, 3]
+
+        fmin = 0.
+        fmax = 0.
+        smin = 0.
+        smax = 0.
+
+        for case in filter_cases(self.cases, **conditions):
+            filename_w_ext = os.path.basename(case.base_command.split(' ')[1])
+            filename = os.path.splitext(filename_w_ext)[0]
+            files = get_files(case.input_path(), filename)
+            logfile = case.input_path(f'{filename}.log')
+            files = get_files_at_given_times_from_log(files, times, logfile)
+            for file, t in zip(files, times):
+                data = load(file)
+                f = data['arrays']['fluid']
+                s = data['arrays']['gate']
+
+                if fmin > min(f.get(fval)):
+                    fmin = min(f.get(fval))
+
+                if fmax < max(f.get(fval)):
+                    fmax = max(f.get(fval))
+
+                if smin > min(s.get(sval)):
+                    smin = min(s.get(sval))
+
+                if smax < max(s.get(sval)):
+                    smax = max(s.get(sval))
+
+        return fmin, fmax, smin, smax
 
 
 class Ng2020ElasticDamBreak(Ng2020HydrostaticWaterColumnOnElasticPlate):
@@ -563,11 +624,11 @@ class Ng2020ElasticDamBreak(Ng2020HydrostaticWaterColumnOnElasticPlate):
             #     tf=0.4,
             #     ), 'CTVF')
 
-            # 'wcsph_fluids': (dict(
-            #     scheme='wcsph_fluids',
-            #     pfreq=500,
-            #     tf=0.4,
-            #     ), 'wcsph_fluids'),
+            'wcsph_fluids': (dict(
+                scheme='wcsph_fluids',
+                pfreq=500,
+                tf=0.4,
+                ), 'wcsph_fluids'),
 
             'wcsph': (dict(
                 scheme='wcsph',
@@ -587,20 +648,21 @@ class Ng2020ElasticDamBreak(Ng2020HydrostaticWaterColumnOnElasticPlate):
     def run(self):
         self.make_output_dir()
         self.plot_displacement()
-        conditions = {'scheme': 'wcsph'}
+        conditions = {'scheme': 'wcsph_fluids'}
 
         # schematic
         self.plot_prop(conditions=conditions, size=0.1,
                        show_fluid=True, fmin=0, fmax=18000, show_structure=True,
                        smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
-                       scmap='Greens', show_fsmap=False, times=[0],
+                       scmap='Greens', show_fsmap=False, times=[0.0],
                        fname_prefix="schematic")
 
         # snapshots at different timesteps
-        self.plot_prop(conditions=conditions, size=0.2,
+        self.plot_prop(conditions=conditions, size=2.,
                        show_fluid=True, fmin=0, fmax=18000, show_structure=True,
                        smin=-3*1e6, smax=3*1e6, fcmap='rainbow', show_fcmap=False,
-                       scmap='viridis', show_fsmap=False, times=[0.1, 0.2],
+                       scmap='viridis', show_fsmap=False,
+                       times=[0.00, 0.08, 0.16, 0.24, 0.32, 0.40],
                        fname_prefix="snap", only_colorbar=False)
 
         # save colorbar
@@ -698,17 +760,19 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
 
         # Base case info
         self.case_info = {
-            # 'wcsph': (dict(
-            #     scheme='wcsph',
-            #     pfreq=300,
-            #     tf=0.7,
-            #     ), 'WCSPH'),
-
-            'wcsph_fluids': (dict(
+            'd0_1e_3': (dict(
                 scheme='wcsph_fluids',
                 pfreq=300,
                 tf=0.7,
-                ), 'WCSPH fluids'),
+                d0=1e-3,
+                ), 'd0 1e-3'),
+
+            'd0_5e_4': (dict(
+                scheme='wcsph_fluids',
+                pfreq=300,
+                tf=0.7,
+                d0=5e-4,
+                ), 'd0 5e-4'),
         }
 
         self.cases = [
@@ -721,9 +785,38 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
 
     def run(self):
         self.make_output_dir()
-        self.plot_figures()
+        self.plot_displacement()
+        conditions = {'d0': 1. * 1e-3}
 
-    def plot_figures(self):
+        # schematic
+        self.plot_prop(conditions=conditions, size=0.1,
+                       show_fluid=True, fmin=0., fmax=0., show_structure=True,
+                       smin=0., smax=0., fcmap='rainbow', show_fcmap=False,
+                       scmap='prism', show_fsmap=False, times=[0],
+                       fname_prefix="schematic")
+
+        # snapshots at different timesteps
+        self.plot_prop(conditions=conditions, size=2.,
+                       show_fluid=True, fmin=0., fmax=10, show_structure=True,
+                       smin=0., smax=0., fcmap='rainbow', show_fcmap=False,
+                       scmap='viridis', show_fsmap=False, times=[0.0, 0.2, 0.4, 0.5, 0.6, 0.7],
+                       fname_prefix="snap", only_colorbar=False)
+
+        # # snapshots at different timesteps
+        # self.plot_prop(conditions=conditions, size=2.,
+        #                show_fluid=False, fmin=fmin, fmax=fmax, show_structure=True,
+        #                smin=smin, smax=smax, fcmap='rainbow', show_fcmap=False,
+        #                scmap='viridis', show_fsmap=False, times=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        #                fname_prefix="gate", only_colorbar=True)
+
+        # save colorbar
+        self.plot_prop(conditions=conditions, size=2.,
+                       show_fluid=True, fmin=0., fmax=10, show_structure=True,
+                       smin=0., smax=0., fcmap='rainbow', show_fcmap=True,
+                       scmap='viridis', show_fsmap=False, times=[0.0],
+                       fname_prefix="colorbar", only_colorbar=True)
+
+    def plot_displacement(self):
         data = {}
         for name in self.case_info:
             data[name] = np.load(self.input_path(name, 'results.npz'))
@@ -765,6 +858,87 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
         # Plot x amplitude
         # ==================================
 
+    def plot_prop(self, conditions=None,
+                  fcmap='rainbow', scmap='rainbow', figsize=(10, 4), size=20,
+                  dpi=300, show_fluid=True, fmin=-6, fmax=6,
+                  show_structure=True, smin=-6, smax=6, show_fcmap=True,
+                  show_fsmap=True, times=None, only_colorbar=False,
+                  fname_prefix=''):
+        if conditions is None:
+            conditions = {}
+        if times is None:
+            times = [1, 2, 3]
+        aspect = 70
+        pad = 0.01
+        size_boundary = 0.05
+
+        for case in filter_cases(self.cases, **conditions):
+            filename_w_ext = os.path.basename(case.base_command.split(' ')[1])
+            filename = os.path.splitext(filename_w_ext)[0]
+            files = get_files(case.input_path(), filename)
+            logfile = case.input_path(f'{filename}.log')
+            files = get_files_at_given_times_from_log(files, times, logfile)
+            for file, t in zip(files, times):
+                fig, ax = plt.subplots(1, 1, figsize=figsize)
+                data = load(file)
+                t = data['solver_data']['t']
+                f = data['arrays']['fluid']
+                s1 = data['arrays']['tank']
+                s = data['arrays']['gate']
+                s2 = data['arrays']['gate_support']
+                label = rf"vmag"
+                val = (f.u**2. + f.v**2.)**0.5
+                tmp = ax.scatter(
+                    f.x, f.y, c=val, s=size, rasterized=True, cmap=fcmap,
+                    edgecolor='none', vmin=fmin, vmax=fmax
+                )
+
+                if show_fcmap == True:
+                    cbarf = fig.colorbar(tmp, ax=ax, label=f'{label}',
+                                         pad=pad, aspect=aspect,
+                                         format='%.0e')
+                    cbarf.ax.tick_params(labelsize='xx-small')
+
+                tmp2 = ax.scatter(s.x, s.y, c=s.m, s=size,
+                                  rasterized=True,
+                                  cmap=scmap,
+                                  edgecolor='none')
+
+                if show_fsmap == True:
+                    cbars = fig.colorbar(tmp2, ax=ax, label=r'$\sigma_{00}$',
+                                         pad=pad, aspect=aspect,
+                                         format='%.0e')
+                    cbars.ax.tick_params(labelsize='xx-small')
+
+                # msg = r"$t = $" + f'{t:.1f}'
+                # xmax = f.x.max()
+                # ymax = f.y.max()
+                # ax.annotate(
+                #     msg, (xmax*1.2, ymax*1.0), fontsize='small',
+                #     bbox=dict(boxstyle="square,pad=0.3", fc='white')
+                # )
+
+                ax.scatter(s1.x, s1.y, c=s1.m, cmap='viridis', s=size_boundary,
+                           rasterized=True)
+                ax.scatter(s2.x, s2.y, c=s2.m, cmap='viridis', s=size_boundary,
+                           rasterized=True)
+                # ax.title()
+                ax.set_xlim([-0.08, 0.51])
+                ax.set_ylim([-0.152, 0.178])
+                ax.axis('off')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.grid()
+                ax.set_aspect('equal')
+
+                if only_colorbar is True:
+                    ax.remove()
+
+                fig.savefig(self.output_path(f'{fname_prefix}_t_{t:.1f}.png'),
+                            dpi=dpi)
+                plt.clf()
+                plt.close()
+
 
 class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
     """
@@ -786,9 +960,16 @@ class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
             #     tf=0.0025,
             #     ), 'WCSPH'),
 
+            # 'wcsph_fluids': (dict(
+            #     scheme='wcsph_fluids',
+            #     pfreq=300,
+            #     tf=0.0025,
+            #     ), 'WCSPH fluids'),
+
             'wcsph_fluids': (dict(
                 scheme='wcsph_fluids',
                 pfreq=300,
+                d0=5. * 1e-3,
                 tf=0.0025,
                 ), 'WCSPH fluids'),
 

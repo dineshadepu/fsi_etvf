@@ -244,7 +244,7 @@ class ElasticGate(Application):
         # =============================================
         # Only structures part particle properties
         # =============================================
-        clamp_wall = True
+        clamp_wall = False
         if clamp_wall is True:
             xp, yp, xw, yw = get_clamped_beam(self.L, self.H,
                                               self.H/2.5,
@@ -392,7 +392,12 @@ class ElasticGate(Application):
         # print("DT: %s" % dt)
         tf = 0.5
 
-        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=2000)
+        # The times are from Fig 5. of "A fully Lagrangian method for
+        # fluid-structure interaction problems with deformable floating
+        # structure", by Yijie Sun 2019
+        times = [0.00, 0.08, 0.16, 0.24, 0.32, 0.40]
+        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=2000,
+                                     output_at_times=times)
 
         self.scheme.configure(
             dim=2,

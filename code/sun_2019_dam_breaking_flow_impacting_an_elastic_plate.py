@@ -28,6 +28,7 @@ https://ars.els-cdn.com/content/image/1-s2.0-S0889974618308673-gr7_lrg.jpg
 
 """
 
+
 import numpy as np
 
 from pysph.base.kernels import CubicSpline
@@ -233,7 +234,11 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         self.gate_nu = 0.0
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
-        self.u_max_gate = 20.
+        if self.options.d0 == 1e-3:
+            self.u_max_gate = 20.
+        elif self.options.d0 == 5e-4:
+            self.u_max_gate = 40.
+
         self.mach_no_gate = self.u_max_gate / self.c0_gate
         self.alpha_solid = 1.
         self.beta_solid = 0.
@@ -419,7 +424,9 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         dt = self.dt_fluid
         tf = 1.
 
-        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=2000)
+        times = [0.0, 0.2, 0.4, 0.5, 0.6, 0.7]
+        self.scheme.configure_solver(dt=dt, tf=tf, pfreq=2000,
+                                     output_at_times=times)
 
         self.scheme.configure(
             dim=2,

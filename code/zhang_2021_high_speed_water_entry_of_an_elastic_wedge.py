@@ -14,6 +14,14 @@ An enhanced ISPH-SPH coupled method for simulation of incompressible
 fluid-elastic structure interactions
 
 https://doi.org/10.1016/j.cpc.2018.05.012
+
+# Wedge geometry description
+A non-intrusive partitioned approach to couple smoothed particle hydrodynamics
+and finite element methods for transient fluid-structure interaction problems
+with large interface motion
+
+https://doi.org/10.1007/s00466-015-1131-8
+
 """
 
 import numpy as np
@@ -55,8 +63,27 @@ def find_displacement_index(pa):
     pa.A_index[index] = 1
 
 
-def get_hydrostatic_tank_with_fluid(fluid_length=1., fluid_height=2., tank_height=2.3,
-                                    tank_layers=2, fluid_spacing=0.1):
+def find_velocity_indices(pa):
+    min_x = min(pa.x)
+    max_x = max(pa.x)
+    pa.add_property('velocity_indices', type='int',
+                    data=np.zeros(len(pa.x)))
+
+    index = (pa.x == min_x)
+    pa.velocity_indices[index] = 1
+
+    index = (pa.x == max_x)
+    pa.velocity_indices[index] = 1
+
+    min_y = min(pa.y)
+    x_min_y = pa.x[pa.y == min_y]
+    index = pa.x == x_min_y
+    pa.velocity_indices[index] = 1
+
+
+def get_hydrostatic_tank_with_fluid(fluid_length=1., fluid_height=2.,
+                                    tank_height=2.3, tank_layers=2,
+                                    fluid_spacing=0.1):
     import matplotlib.pyplot as plt
 
     xf, yf = get_2d_block(dx=fluid_spacing,
@@ -126,7 +153,7 @@ def get_wedge(wedge_size, wedge_width, slope, spacing):
 class WaterEntryOfElasticWedge(Application):
     def add_user_options(self, group):
         group.add_argument("--d0", action="store", type=float, dest="d0",
-                           default=5e-3,
+                           default=5 * 1e-3,
                            help="Spacing between the particles")
 
     def consume_user_options(self):
@@ -294,7 +321,7 @@ class WaterEntryOfElasticWedge(Application):
         # ===================================
         xp += self.fluid_length
         wedge = get_particle_array(
-            x=xp, y=yp, v=-30, m=m, h=self.h_fluid, rho=self.wedge_rho0,
+            x=xp, y=yp, m=m, h=self.h_fluid, rho=self.wedge_rho0,
             E=self.wedge_E, nu=self.wedge_nu, rho_ref=self.wedge_rho0,
             name="wedge",
             constants={
@@ -303,6 +330,11 @@ class WaterEntryOfElasticWedge(Application):
             })
         # add post processing variables.
         find_displacement_index(wedge)
+        find_velocity_indices(wedge)
+
+        wedge.add_property('vhat')
+        wedge.v[:] = -30.
+        wedge.vhat[:] = -30.
 
         wedge.y += max(fluid.y) - min(wedge.y) + self.fluid_spacing
         wedge.x -= min(wedge.x) - min(fluid.x)
@@ -328,7 +360,8 @@ class WaterEntryOfElasticWedge(Application):
         wedge.add_output_arrays(['right_panel_indices',
                                  'A_index',
                                  'B_index',
-                                 'C_index'])
+                                 'C_index',
+                                 'velocity_indices'])
         wedge.add_output_arrays(['is_boundary', 'p_fsi'])
         return [fluid, tank, wedge]
 
@@ -454,6 +487,30 @@ class WaterEntryOfElasticWedge(Application):
 
             # When
             a_eval.evaluate(t, dt)
+
+    def post_step(self, solver):
+        for pa in self.particles:
+            if pa.name == 'wedge':
+                pa.u[pa.velocity_indices == 1] = 0.
+                pa.v[pa.velocity_indices == 1] = -30.
+
+                pa.uhat[pa.velocity_indices == 1] = 0.
+                pa.vhat[pa.velocity_indices == 1] = -30.
+
+                pa.au[pa.velocity_indices == 1] = 0.
+                pa.av[pa.velocity_indices == 1] = 0.
+
+                pa.auhat[pa.velocity_indices == 1] = 0.
+                pa.avhat[pa.velocity_indices == 1] = 0.
+
+                pa.as00[pa.velocity_indices == 1] = 0.
+                pa.as01[pa.velocity_indices == 1] = 0.
+                pa.as02[pa.velocity_indices == 1] = 0.
+                pa.as11[pa.velocity_indices == 1] = 0.
+                pa.as12[pa.velocity_indices == 1] = 0.
+                pa.as22[pa.velocity_indices == 1] = 0.
+
+                pa.arho[pa.velocity_indices == 1] = 0.
 
     def post_process(self, fname):
         from pysph.solver.utils import iter_output, load
