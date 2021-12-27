@@ -234,10 +234,9 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
         self.gate_nu = 0.0
         self.c0_gate = get_speed_of_sound(self.gate_E, self.gate_nu,
                                           self.gate_rho0)
-        if self.options.d0 == 1e-3:
-            self.u_max_gate = 20.
-        elif self.options.d0 == 5e-4:
-            self.u_max_gate = 40.
+        self.u_max_gate = 20.
+        if self.options.d0 == 5e-4:
+            self.u_max_gate = 30.
 
         self.mach_no_gate = self.u_max_gate / self.c0_gate
         self.alpha_solid = 1.
@@ -254,7 +253,7 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
 
         self.dt_fluid = 0.25 * self.fluid_spacing * self.hdx / (self.c0_fluid * 1.1)
         self.dt_solid = 0.25 * self.h_fluid / (
-            (self.gate_E / self.gate_rho0)**0.5 + self.u_max_gate)
+            (self.gate_E / self.gate_rho0)**0.5 + 10.)
 
     def create_particles(self):
         # ===================================
@@ -437,6 +436,7 @@ class Sun2019DamBreakingFLowImpactingAnElasticPlate(Application):
             nu_fluid=0.0,
             mach_no_fluid=self.mach_no_fluid,
             mach_no_structure=self.mach_no_gate,
+            structure_u_max=self.u_max_gate,
             gy=self.gy,
             alpha_fluid=0.1,
             alpha_solid=1.,

@@ -539,7 +539,8 @@ class WaterEntryOfElasticWedge(Application):
             _t = sd['t']
             t_ctvf.append(_t)
 
-            y_tmp = y_0 - 30. * _t
+            # y_tmp = y_0 - 30. * _t
+            y_tmp = y_0
             yatBctvf.append(wedge.y[index_B] - y_tmp)
 
             # save the pressure data

@@ -767,12 +767,21 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
                 d0=1e-3,
                 ), 'd0 1e-3'),
 
-            'd0_5e_4': (dict(
+            'd0_1e_3_ipst': (dict(
                 scheme='wcsph_fluids',
+                solid_pst="ipst",
                 pfreq=300,
                 tf=0.7,
+                d0=1e-3,
+                ), 'd0 1e-3 IPST'),
+
+            'd0_5e_4': (dict(
+                scheme='wcsph_fluids',
+                solid_pst="ipst",
+                pfreq=500,
+                tf=0.7,
                 d0=5e-4,
-                ), 'd0 5e-4'),
+                ), 'd0 5e-4 IPST'),
         }
 
         self.cases = [
@@ -973,6 +982,14 @@ class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
                 tf=0.0025,
                 ), 'WCSPH fluids'),
 
+            'd0_1e_2': (dict(
+                scheme='wcsph_fluids',
+                pfreq=300,
+                d0=1. * 1e-2,
+                alpha_fluid=2.0,
+                tf=0.0025,
+                ), 'd0 = 1e-2'),
+
             # 'rogers': (dict(
             #     scheme='ctvf',
             #     pfreq=500,
@@ -980,7 +997,6 @@ class Zhang2021HighSpeedWaterEntryOfAnElasticWedge(Problem):
             #     rogers_eqns=None
             #     ), 'Rogers Scheme'),
         }
-
 
         self.cases = [
             Simulation(get_path(name), cmd,

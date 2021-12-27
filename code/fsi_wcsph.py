@@ -535,7 +535,8 @@ class AccelerationOnStructureDueToFluidViscosity(Equation):
 class FSIWCSPHFluidsScheme(Scheme):
     def __init__(self, fluids, structures, solids, structure_solids, dim,
                  h_fluid, c0_fluid, nu_fluid, rho0_fluid, mach_no_fluid,
-                 mach_no_structure, dt_fluid=1., dt_solid=1., pb_fluid=0.0,
+                 mach_no_structure, structure_u_max=10.,
+                 dt_fluid=1., dt_solid=1., pb_fluid=0.0,
                  gx=0.0, gy=0.0, gz=0.0, alpha_solid=1.0,
                  beta_solid=0.0, alpha_fluid=0.0, edac_alpha=0.5,
                  pst="sun2019", edac=False):
@@ -604,6 +605,15 @@ class FSIWCSPHFluidsScheme(Scheme):
         self.damping_coeff = 0.002
         self.solid_velocity_bc = True
         self.fsi_type = None
+        self.solid_pst = "sun2019"
+        # attributes for IPST technique
+        self.ipst_max_iterations = 10
+        self.ipst_min_iterations = 5
+        self.ipst_tolerance = 0.2
+        self.ipst_interval = 1
+        self.structure_u_max = structure_u_max
+
+        self.debug = False
 
         # common properties
         self.solver = None
@@ -647,16 +657,16 @@ class FSIWCSPHFluidsScheme(Scheme):
                            dest="damping_coeff", default=0.000, type=float,
                            help="Damping coefficient for Bui")
 
-        # choices = ['']
-        # group.add_argument(
-        #     "--pst", action="store", dest='pst', default="sun2019",
-        #     choices=choices,
-        #     help="Specify what PST to use (one of %s)." % choices)
+        choices = ['sun2019', 'ipst']
+        group.add_argument(
+            "--solid-pst", action="store", dest='solid_pst', default="sun2019",
+            choices=choices,
+            help="Specify what PST to use for elastic solid (one of %s)." % choices)
 
     def consume_user_options(self, options):
         vars = ['alpha_fluid', 'alpha_solid', 'beta_solid',
                 'edac_alpha', 'wall_pst', 'damping', 'damping_coeff',
-                'solid_velocity_bc']
+                'solid_velocity_bc', 'solid_pst']
         data = dict((var, self._smart_getattr(options, var)) for var in vars)
         self.configure(**data)
 
@@ -701,6 +711,12 @@ class FSIWCSPHFluidsScheme(Scheme):
         from pysph.solver.solver import Solver
         self.solver = Solver(dim=self.dim, integrator=integrator,
                              kernel=kernel, **kw)
+
+    def check_ipst_time(self, t, dt):
+        if int(t / dt) % self.ipst_interval == 0:
+            return True
+        else:
+            return False
 
     def get_equations(self):
         # from pysph.sph.wc.gtvf import (MomentumEquationArtificialStress)
@@ -748,6 +764,12 @@ class FSIWCSPHFluidsScheme(Scheme):
             ElasticSolidComputeAuHatETVFSun2019,
             AddGravityToStructure,
             BuiFukagawaDampingGraularSPH)
+
+        from ipst import (MakeAuhatZero, SavePositionsIPSTBeforeMoving,
+                          AdjustPositionIPST,
+                          CheckUniformityIPST,
+                          ComputeAuhatETVFIPSTSolids,
+                          ResetParticlePositionsIPST)
 
         nu_edac = self._get_edac_nu()
         all = self.fluids + self.solids
@@ -1021,18 +1043,19 @@ class FSIWCSPHFluidsScheme(Scheme):
                         dest=structure,
                         sources=self.structures + self.structure_solids))
 
-                if self.wall_pst is True:
-                    g4.append(
-                        ElasticSolidComputeAuHatETVFSun2019(
-                            dest=structure,
-                            sources=[structure] + self.structure_solids,
-                            mach_no=self.mach_no_structure))
-                else:
-                    g4.append(
-                        ElasticSolidComputeAuHatETVFSun2019(
-                            dest=structure,
-                            sources=[structure],
-                            mach_no=self.mach_no_structure))
+                if self.solid_pst == "sun2019":
+                    if self.wall_pst is True:
+                        g4.append(
+                            ElasticSolidComputeAuHatETVFSun2019(
+                                dest=structure,
+                                sources=[structure] + self.structure_solids,
+                                mach_no=self.mach_no_structure))
+                    else:
+                        g4.append(
+                            ElasticSolidComputeAuHatETVFSun2019(
+                                dest=structure,
+                                sources=[structure],
+                                mach_no=self.mach_no_structure))
 
                 g4.append(
                     AccelerationOnStructureDueToFluid(dest=structure,
@@ -1044,6 +1067,55 @@ class FSIWCSPHFluidsScheme(Scheme):
                             dest=structure, sources=self.fluids, nu=self.nu_fluid))
 
             stage2.append(Group(g4))
+
+            # this PST is handled separately
+            if self.solid_pst == "ipst" and self.wall_pst is True:
+                g5 = []
+                g6 = []
+                g7 = []
+                g8 = []
+
+                # make auhat zero before computation of ipst force
+                eqns = []
+                for structure in self.structures:
+                    eqns.append(MakeAuhatZero(dest=structure, sources=None))
+
+                stage2.append(Group(eqns))
+
+                for structure in self.structures:
+                    g5.append(
+                        SavePositionsIPSTBeforeMoving(dest=structure, sources=None))
+
+                    # these two has to be in the iterative group and the nnps has to
+                    # be updated
+                    # ---------------------------------------
+                    g6.append(
+                        AdjustPositionIPST(dest=structure,
+                                           sources=[structure] + self.structure_solids,
+                                           u_max=self.structure_u_max))
+
+                    g7.append(
+                        CheckUniformityIPST(dest=structure,
+                                            sources=[structure] + self.structure_solids,
+                                            debug=self.debug))
+                    # ---------------------------------------
+
+                    g8.append(ComputeAuhatETVFIPSTSolids(dest=structure,
+                                                         sources=None))
+                    g8.append(ResetParticlePositionsIPST(dest=structure,
+                                                         sources=None))
+
+                stage2.append(Group(g5, condition=self.check_ipst_time))
+
+                # this is the iterative group
+                stage2.append(
+                    Group(equations=[Group(equations=g6),
+                                     Group(equations=g7)], iterate=True,
+                          max_iterations=self.ipst_max_iterations,
+                          min_iterations=self.ipst_min_iterations,
+                          condition=self.check_ipst_time))
+
+                stage2.append(Group(g8, condition=self.check_ipst_time))
 
             g5 = []
             for structure in self.structures:
@@ -1064,6 +1136,7 @@ class FSIWCSPHFluidsScheme(Scheme):
 
     def setup_properties(self, particles, clean=True):
         from solid_mech import (get_shear_modulus, get_speed_of_sound)
+        from ipst import (setup_ipst, QuinticSpline)
 
         pas = dict([(p.name, p) for p in particles])
         for fluid in self.fluids:
@@ -1271,6 +1344,9 @@ class FSIWCSPHFluidsScheme(Scheme):
             # for edac
             if self.edac is True:
                 add_properties(pa, 'ap')
+
+            if self.solid_pst == "ipst":
+                setup_ipst(pa, QuinticSpline)
 
             # update the h if using wendlandquinticc4
             pa.add_output_arrays(['p'])
