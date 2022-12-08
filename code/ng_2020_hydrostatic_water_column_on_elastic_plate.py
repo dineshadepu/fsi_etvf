@@ -444,16 +444,30 @@ class ElasticGate(Application):
             t_ctvf.append(_t)
             y_ctvf.append((gate.y[index] - y_0) * 1)
 
-        t_analytical = np.linspace(0., 1., 1000)
+        t_analytical = np.linspace(0., max(t_ctvf), 1000)
         y_analytical = -6.849 * 1e-5 * np.ones_like(t_analytical)
 
+        # Numerical data
+        path = os.path.abspath(__file__)
+        directory = os.path.dirname(path)
+
+        # load the data
+        data_y_disp_ng_2020 = np.loadtxt(
+            os.path.join(directory, 'ng_2020_hydrostatic_water_column_on_elastic_plate_y_displacement_ng_2020_sph_vcpm.csv'),
+            delimiter=',')
+
+        t_ng_2020, y_ng_2020 = data_y_disp_ng_2020[:, 0] * 1e-4, data_y_disp_ng_2020[:, 1] * 1e-4
+        t_ng_2020 = np.concatenate([t_ng_2020, np.array([max(t_ctvf)])])
+        y_ng_2020 = np.concatenate([y_ng_2020, np.array([y_ng_2020[-1]])])
         res = os.path.join(self.output_dir, "results.npz")
         np.savez(res, t_analytical=t_analytical, y_analytical=y_analytical,
-                 y_ctvf=y_ctvf, t_ctvf=t_ctvf)
+                 y_ctvf=y_ctvf, t_ctvf=t_ctvf,
+                 t_ng_2020=t_ng_2020, y_ng_2020=y_ng_2020)
 
         plt.clf()
         plt.plot(t_analytical, y_analytical, label='Analytical')
         plt.plot(t_ctvf, y_ctvf, "-", label='Simulated')
+        plt.plot(t_ng_2020, y_ng_2020, "-", label='SPH-VCPM')
 
         plt.xlabel('t')
         plt.ylabel('y-amplitude')

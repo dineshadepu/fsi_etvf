@@ -457,11 +457,14 @@ class Ng2020HydrostaticWaterColumnOnElasticPlate(Problem):
         rand_case = (list(data.keys())[0])
         t_analytical = data[rand_case]['t_analytical']
         y_analytical = data[rand_case]['y_analytical']
+        t_ng_2020 = data[rand_case]['t_ng_2020']
+        y_ng_2020 = data[rand_case]['y_ng_2020']
 
         # ==================================
         # Plot x amplitude
         # ==================================
         plt.plot(t_analytical, y_analytical, "-", label='Analytical')
+        plt.plot(t_ng_2020, y_ng_2020, "-", label='SPH-VCPM (Ng et al. 2020)')
         for name in self.case_info:
             t_ctvf = data[name]['t_ctvf']
             y_ctvf = data[name]['y_ctvf']
@@ -760,20 +763,20 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
 
         # Base case info
         self.case_info = {
-            'd0_1e_3': (dict(
-                scheme='wcsph_fluids',
-                pfreq=300,
-                tf=0.7,
-                d0=1e-3,
-                ), 'd0 1e-3'),
+            # 'd0_1e_3': (dict(
+            #     scheme='wcsph_fluids',
+            #     pfreq=300,
+            #     tf=0.7,
+            #     d0=1e-3,
+            #     ), 'd0 1e-3'),
 
-            'd0_1e_3_ipst': (dict(
-                scheme='wcsph_fluids',
-                solid_pst="ipst",
-                pfreq=300,
-                tf=0.7,
-                d0=1e-3,
-                ), 'd0 1e-3 IPST'),
+            # 'd0_1e_3_ipst': (dict(
+            #     scheme='wcsph_fluids',
+            #     solid_pst="ipst",
+            #     pfreq=300,
+            #     tf=0.7,
+            #     d0=1e-3,
+            #     ), 'd0 1e-3 IPST'),
 
             'd0_5e_4': (dict(
                 scheme='wcsph_fluids',
@@ -845,16 +848,17 @@ class Sun2019DamBreakingFlowImpactingAnElasticPlate(Problem):
         # Plot x amplitude
         # ==================================
         plt.clf()
-        plt.plot(txsun, xdsun, "o", label='Sun et al 2019, MPS-DEM')
-        plt.plot(txbogaers, xdbogaers, "^", label='Bogaers 2016, QN-LS')
-        plt.plot(txidelsohn, xdidelsohn, "+", label='Idelsohn 20108, PFEM')
-        plt.plot(txliu, xdliu, "v", label='Liu 2013, SPH')
+        plt.plot(txsun, xdsun, "o-", label='Sun et al 2019, MPS-DEM')
+        plt.plot(txbogaers, xdbogaers, "^-", label='Bogaers 2016, QN-LS')
+        # plt.plot(txidelsohn, xdidelsohn, "+", label='Idelsohn 2008, PFEM')
+        # plt.plot(txliu, xdliu, "v", label='Liu 2013, SPH')
 
         for name in self.case_info:
             t_ctvf = data[name]['t_ctvf']
             x_ctvf = data[name]['x_ctvf']
 
-            plt.plot(t_ctvf, x_ctvf, '-', label=self.case_info[name][1])
+            # plt.plot(t_ctvf, x_ctvf, '-', label=self.case_info[name][1])
+            plt.plot(t_ctvf, x_ctvf, '-', label="Current solver")
 
         plt.xlabel('time')
         plt.ylabel('x - amplitude')

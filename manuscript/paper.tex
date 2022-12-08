@@ -45,11 +45,24 @@
 \cortext[cor1]{Corresponding author}
 
 \begin{abstract}
+In the current work we have proposed a single
+unified meshless particle based numerical scheme to model fluid structure
+interaction problems. A corrected transport velocity formulation is utilised to
+model both fluid and solid phases. Both the phases follow the same set of
+governing equations. The corrected transport velocity formulation has proved
+that it has better approximation in fluids due to the corrected terms as well
+the particle distribution. We also take the advantage of the ctvf scheme in
+eliminating the tensile instability of the structures. The coupling is
+seamlessly done as both the phases are simulated in one configuration and no
+reference frame or initial frame is used to model the dynamics of any phase.
+Three numerical problems are simulated to show the current scheme validation. A
+clamped beam acted upon by a uniformly distributed load, hydrostatic tank on an
+elastic plate, and dam breaking flow hitting a plate.
 \end{abstract}
 
 \begin{keyword}
 %% keywords here, in the form: keyword \sep keyword
-{XXX}, {XXX}, {XXX}
+{Smoothed particle hydrodynamics}, {Fluid-structure interaction}, {Transport velocity formulation}
 
 %% MSC codes here, in the form: \MSC code \sep code
 %% or \MSC[2008] code \sep code (2000 is the default)
@@ -60,17 +73,105 @@
 
 % \linenumbers
 
-
-
 \section{Introduction}
 \label{sec:intro}
+
+\begin{itemize}
+\item Fluid structure interaction in real life. Refer to papers where they deal
+  with FSI problems, this includes FEM coupling, MPS coupling and many other
+  paper, or may be looking at one review paper and select 5 paper to write about this.
+\item In many different ways FSI is modeled, this includes mesh based and mesh
+  less. Explain in a good detail what meshless methods are out there which
+  handles these problems. This includes SPH too.
+\item Explain different ways SPH is applied in FSI area. Detail some papers
+  where how differently fluid as well as structures is modelled. This includes
+  ISPH, WCSPH, TVF, delta+ SPH and for structures TLSPH, ULSPH, some other DEM
+  methods. Also mention the latest multiphase flow, where air is considered,
+  then mention the adaptive formulation, where the author captures the cavity.
+  And what different coupling approaches are handled so far.
+\item Mention the open source software which provide SPH formulation (This is
+  optional for now).
+\item Explain what we are going to do in the current work. We couple the
+  transport velocity formulation approach extended to free surface to model
+  both the phases.
+\item Explain the examples.
+\end{itemize}
 
 Xu has introduced the particle shifting and adjusted the particles and applied
 it to fluid problems. TVF is a new variant which unifies the formulation and
 applied it to fluid problems. This TVF has been generalized and applied to free
 surface problems as well as elastic solid problems.
 
+FSI is a common engineering problem that is seen in daily life. Few examples
+include the deformation of the wind turbine blade due to the fluid flow, the
+flow traversal due to the deflected blade, blood flow in heart value, coastal
+engineering, and vortex-induced vibration
+\cite{williamson2004vortex,bearman2011circular}. An accurate study FSI
+phenomena can allow us to understand systems where FSI is prevalent. However,
+studying the FSI phenomena through experiments or analytical techniques is
+complex. The complexity arises due to the nonlinear behavior of the
+fluid-structure coupling. Due to the difficulty in studying the FSI phenomena by
+experiments and analytical methods, we resort to numerical study due to its
+flexibility. Mesh-based and meshless methods are used to study the FSI phenomena
+numerically.
 
+Mesh-based schemes such as FEM \cite{lozovskiy2015unconditionally} and FVM
+\cite{jasak2007updated} have been in the market for the last few decades
+and are successful in modeling the FSI phenomena. But, mesh-based procedures are
+not favorable when dealing with free surface flow problems and problems with
+large deformation of solids due to large mesh distortion
+\cite{moresi2003lagrangian}.
+
+% Current research
+% has been carried out to address such issues, and methods like Immersed Boundary
+% Method \cite{mittal2005immersed} and level set method
+% \cite{olsson2005conservative} are proposed to address such issues.
+
+
+Therefore, meshless methods are used to solve free surface and large deformation
+problems, which is advantageous in these areas. Among many meshless methods, we
+often find Smoothed particle hydrodynamics (SPH) and Material point method (MPM)
+to model the fluid phase, and the solids phase is modeled with DEM, RKPM, or SPH
+itself \cite{hu2010material,li2022material}. These meshless techniques have
+been coupled for the past two decades to model the fluid-structure interaction.
+A few schemes with SPH and MPM are SPH-DEM, SPH-TLSPH, SPH-RKPM, SPH-PD,
+MPM-DEM, MPM-RKPM \cite{khayyer2022systematic}. For more, see the review by
+\cite{khayyer2022systematic}.%  In the current work, we use SPH alone to model
+% fluid and solid phases.
+
+In the SPH methods, fluids are modelled primarily using two different
+approaches, one by assuming it to be weakly compressible and another by
+considering it as incompressible.
+% Though both techniques successfully model fluid dynamics, they have their
+% drawbacks.
+Weakly compressible SPH suffers from particle pairing and irregular particle
+distribution problems affecting the function approximation.
+\cite{xu2009accuracy} proposed a particle shifting technique, where particle
+positions are adjusted after each timestep to distribute the particles
+homogeneously. The particle properties are adjusted at the new position using
+Taylor series approximation. Later, \cite{adami2013transport} proposed a
+complete scheme where the particle transport is incorporated in Navier-Stokes
+equations, and a new set of equations is solved and applied to internal fluid
+flow problems. \cite{zhang_hu_adams17} extended the TVF formulation to GTVF
+and solved free surface problems. \cite{adepu2021corrected}proposed a
+corrected TVF scheme (CTVF) where the missing terms in TVF are incorporated to
+solve the free surface flow problems.
+
+
+If we consider papers where SPH alone is used to model the FSI phenomena, we
+have WCSPH-Total Lagrangian SPH (TLSPH) \cite{zhan2019stabilized},
+WCSPH-Updated Lagrangian SPH (ULSPH) \cite{antoci2007numerical},
+ISPH-TLSPH\cite{salehizadeh2022coupled}. Where the coupling is handled
+using \cite{Adami2013} conditions and adapted accordingly.
+% So, in all these
+% schemes we have fluid being modeled in updated frame and solid being simulated
+% in a reference frame.
+Modeling the FSI using a transport velocity formulation is at a great advantage
+as it can solve the tensile instability issue in solid dynamics and inharmonious
+particle distribution in fluids. We model both fluid and solid phase in CTVF and
+couple them in the current work.
+
+\section{Fluid }
 
 \section{Governing equations}
 
